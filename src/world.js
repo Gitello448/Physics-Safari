@@ -101,7 +101,7 @@ export class World {
 
   isEntranceTile(x, y) {
     const ent = this.entranceTile;
-    return x >= ent.x - 2 && x <= ent.x + 2 && y >= ent.y - 1 && y <= ent.y + 1;
+    return x >= ent.x - 3 && x <= ent.x + 3 && y >= ent.y - 2 && y <= ent.y + 1;
   }
 
   isWalkable(x, y) {

@@ -42,7 +42,7 @@ export function render(ctx, canvas, world, camera, animals, visitors, input, t) 
   }
 
   drawHQ(ctx, world, camera, size);
-  drawEntrance(ctx, world, camera, size);
+  drawEntrance(ctx, world, camera, size, t);
 
   for (const v of visitors) {
     const s = camera.worldToScreen(v.x * TILE, v.y * TILE);
@@ -98,45 +98,138 @@ function drawHQ(ctx, world, camera, size) {
 // This is a first pass for "clearly a recognizable entrance" — the fuller
 // pixel-art treatment (flags, torches, animation) comes in a later visual
 // pass, not this step.
-function drawEntrance(ctx, world, camera, size) {
+function drawEntrance(ctx, world, camera, size, t) {
   const ent = world.entranceTile;
-  const topLeft = camera.worldToScreen((ent.x - 2) * TILE, (ent.y - 1) * TILE);
-  const w = size * 5, h = size * 3;
+  const topLeft = camera.worldToScreen((ent.x - 3) * TILE, (ent.y - 2) * TILE);
+  const w = size * 7, h = size * 4;
+  const pillarW = size * 0.9;
+  const pillarX0 = topLeft.x + w * 0.06;
+  const pillarX1 = topLeft.x + w * 0.94 - pillarW;
+  const pillarTop = topLeft.y + h * 0.12;
+  const pillarH = h * 0.72;
 
   // plaza / welcome walkway
-  ctx.fillStyle = '#c9915a';
-  ctx.fillRect(topLeft.x, topLeft.y + h * 0.55, w, h * 0.5);
+  const plazaGrad = ctx.createLinearGradient(0, topLeft.y + h * 0.5, 0, topLeft.y + h);
+  plazaGrad.addColorStop(0, '#d9a366');
+  plazaGrad.addColorStop(1, '#b97b45');
+  ctx.fillStyle = plazaGrad;
+  ctx.fillRect(topLeft.x, topLeft.y + h * 0.5, w, h * 0.5);
+  ctx.strokeStyle = 'rgba(90,55,20,0.35)';
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 6; i++) {
+    const lx = topLeft.x + (w * i) / 6;
+    ctx.beginPath();
+    ctx.moveTo(lx, topLeft.y + h * 0.5);
+    ctx.lineTo(lx, topLeft.y + h);
+    ctx.stroke();
+  }
 
-  // pillars
-  ctx.fillStyle = '#6b4a28';
-  ctx.fillRect(topLeft.x + w * 0.08, topLeft.y + h * 0.15, size * 0.55, h * 0.7);
-  ctx.fillRect(topLeft.x + w * 0.92 - size * 0.55, topLeft.y + h * 0.15, size * 0.55, h * 0.7);
+  // stone pillars, shaded for depth (dark left face, mid front, light right highlight)
+  for (const px of [pillarX0, pillarX1]) {
+    ctx.fillStyle = '#6e6a63';
+    ctx.fillRect(px, pillarTop, pillarW, pillarH);
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.fillRect(px, pillarTop, pillarW * 0.28, pillarH);
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    ctx.fillRect(px + pillarW * 0.78, pillarTop, pillarW * 0.22, pillarH);
+    // stone block seams
+    ctx.strokeStyle = 'rgba(20,18,15,0.35)';
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 4; i++) {
+      const ly = pillarTop + (pillarH * i) / 4;
+      ctx.beginPath();
+      ctx.moveTo(px, ly);
+      ctx.lineTo(px + pillarW, ly);
+      ctx.stroke();
+    }
+    // wider stone base/footing
+    ctx.fillStyle = '#565349';
+    ctx.fillRect(px - pillarW * 0.12, pillarTop + pillarH - size * 0.18, pillarW * 1.24, size * 0.24);
+  }
 
-  // archway beam
+  // wooden crossbeam with grain shading
+  const beamY = topLeft.y + h * 0.02;
+  const beamH = size * 0.4;
   ctx.fillStyle = '#8a5a2a';
-  ctx.fillRect(topLeft.x + w * 0.04, topLeft.y + h * 0.08, w * 0.92, size * 0.32);
+  ctx.fillRect(topLeft.x + w * 0.03, beamY, w * 0.94, beamH);
+  ctx.fillStyle = 'rgba(255,210,140,0.25)';
+  ctx.fillRect(topLeft.x + w * 0.03, beamY, w * 0.94, beamH * 0.3);
+  ctx.fillStyle = 'rgba(60,30,10,0.3)';
+  ctx.fillRect(topLeft.x + w * 0.03, beamY + beamH * 0.75, w * 0.94, beamH * 0.25);
 
-  // hanging sign
-  ctx.fillStyle = '#3f7a3a';
-  ctx.fillRect(topLeft.x + w * 0.18, topLeft.y - size * 0.3, w * 0.64, size * 0.5);
+  // hanging sign with a beveled border for depth
+  const signW = w * 0.66, signH = size * 0.62;
+  const signX = topLeft.x + (w - signW) / 2;
+  const signY = topLeft.y - size * 0.4;
+  ctx.fillStyle = '#2f5a2a';
+  ctx.fillRect(signX, signY, signW, signH);
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  ctx.fillRect(signX, signY, signW, signH * 0.35);
+  ctx.strokeStyle = '#ffe066';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(signX + 3, signY + 3, signW - 6, signH - 6);
   ctx.strokeStyle = '#0f1509';
   ctx.lineWidth = 2;
-  ctx.strokeRect(topLeft.x + w * 0.18, topLeft.y - size * 0.3, w * 0.64, size * 0.5);
+  ctx.strokeRect(signX, signY, signW, signH);
   ctx.fillStyle = '#ffe066';
-  ctx.font = `bold ${Math.max(8, size * 0.2)}px monospace`;
+  ctx.font = `bold ${Math.max(9, size * 0.22)}px monospace`;
   ctx.textAlign = 'center';
-  ctx.fillText('SAFARI PARK ENTRANCE', topLeft.x + w / 2, topLeft.y - size * 0.03);
+  ctx.fillText('SAFARI PARK ENTRANCE', topLeft.x + w / 2, signY + signH * 0.65);
   ctx.textAlign = 'left';
+
+  // torches on each pillar, with a flickering animated flame
+  for (const px of [pillarX0, pillarX1]) {
+    drawTorch(ctx, px + pillarW / 2, pillarTop - size * 0.05, size, t);
+  }
 
   // low boundary rails flanking the gate
   ctx.strokeStyle = '#5c3d1e';
   ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.moveTo(topLeft.x - size * 1.5, topLeft.y + h * 0.75);
-  ctx.lineTo(topLeft.x, topLeft.y + h * 0.75);
-  ctx.moveTo(topLeft.x + w, topLeft.y + h * 0.75);
-  ctx.lineTo(topLeft.x + w + size * 1.5, topLeft.y + h * 0.75);
+  ctx.moveTo(topLeft.x - size * 1.5, topLeft.y + h * 0.78);
+  ctx.lineTo(topLeft.x, topLeft.y + h * 0.78);
+  ctx.moveTo(topLeft.x + w, topLeft.y + h * 0.78);
+  ctx.lineTo(topLeft.x + w + size * 1.5, topLeft.y + h * 0.78);
   ctx.stroke();
+}
+
+function drawTorch(ctx, cx, baseY, size, t) {
+  const flicker = Math.sin((t || 0) / 90 + cx) * 0.15 + Math.sin((t || 0) / 47 + cx * 1.7) * 0.08;
+  const poleH = size * 0.55;
+  const poleTop = baseY - poleH;
+
+  // pole + bracket
+  ctx.fillStyle = '#3a2a18';
+  ctx.fillRect(cx - size * 0.05, poleTop, size * 0.1, poleH);
+  ctx.fillStyle = '#221a10';
+  ctx.beginPath();
+  ctx.ellipse(cx, poleTop, size * 0.13, size * 0.08, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // soft glow
+  const glowR = size * (0.5 + flicker * 0.3);
+  const glow = ctx.createRadialGradient(cx, poleTop - size * 0.12, 1, cx, poleTop - size * 0.12, glowR);
+  glow.addColorStop(0, 'rgba(255,180,60,0.35)');
+  glow.addColorStop(1, 'rgba(255,180,60,0)');
+  ctx.fillStyle = glow;
+  ctx.beginPath();
+  ctx.arc(cx, poleTop - size * 0.12, glowR, 0, Math.PI * 2);
+  ctx.fill();
+
+  // layered flame
+  const flameH = size * (0.36 + flicker);
+  ctx.fillStyle = '#d94f1e';
+  ctx.beginPath();
+  ctx.ellipse(cx, poleTop - flameH * 0.35, size * 0.16, flameH * 0.55, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#f2932e';
+  ctx.beginPath();
+  ctx.ellipse(cx, poleTop - flameH * 0.42, size * 0.11, flameH * 0.4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#ffe066';
+  ctx.beginPath();
+  ctx.ellipse(cx, poleTop - flameH * 0.5, size * 0.06, flameH * 0.22, 0, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 function drawCursor(ctx, world, camera, input, size) {

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Safari Scholar</title>
+<link rel="stylesheet" href="src/style.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud">
+    <div id="devBadge" class="pixel-panel hidden">🛠 DEV MODE — unlimited credits</div>
+    <div id="credits" class="pixel-panel">🪙 <span id="creditsValue">5000</span></div>
+    <div id="researchBadge" class="pixel-panel">🔬 <span id="researchValue">0</span></div>
+    <div id="visitorCount" class="pixel-panel">🚶 <span id="visitorValue">0</span></div>
+    <div id="toast" class="pixel-panel hidden"></div>
+  </div>
+
+  <div id="toolbar" class="pixel-panel">
+    <div class="tool-group">
+      <button class="tool-btn" data-tool="pan" title="Pan / Select">✋</button>
+      <button class="tool-btn" data-tool="path" title="Dirt Path — 🪙10">🛤️</button>
+      <button class="tool-btn" data-tool="fence" title="Wood Fence — 🪙15">🚧</button>
+      <button class="tool-btn" data-tool="gate" title="Gate — 🪙25">🚪</button>
+      <button class="tool-btn" data-tool="delete" title="Remove">🗑️</button>
+    </div>
+    <div class="tool-group" id="animalTools">
+      <button class="tool-btn" data-tool="animal:zebra" title="Zebra — 🪙500">🦓</button>
+      <button class="tool-btn" data-tool="animal:giraffe" title="Giraffe — 🪙800">🦒</button>
+      <button class="tool-btn" data-tool="animal:rhino" title="Rhino — 🪙1200">🦏</button>
+    </div>
+    <div class="tool-group">
+      <button class="tool-btn" id="eduHomeBtn" title="Curriculum, Practice Mode, Equation Sheet, Exam Review">📘</button>
+    </div>
+    <div class="tool-group">
+      <button class="tool-btn" id="devModeToggle" title="Toggle Development Mode (unlimited credits for testing)">🛠</button>
+    </div>
+  </div>
+
+  <div id="hint" class="pixel-panel">Right-drag or arrow keys to pan · Scroll to zoom</div>
+
+  <div id="hqBackdrop" class="hidden"></div>
+  <div id="hqPrompt" class="pixel-panel hidden">
+    <div class="hq-prompt-title">SAFARI EXPEDITION HQ</div>
+    <div class="hq-prompt-body">Head out to study physics and bring back credits for the park.</div>
+    <div class="hq-prompt-actions">
+      <button id="hqGoBtn" class="big-btn">GO ON SAFARI</button>
+      <button id="hqCancelBtn" class="small-btn">Cancel</button>
+    </div>
+  </div>
+
+  <div id="researchOpportunity" class="pixel-panel hidden">
+    <div class="hq-prompt-title">🔬 RESEARCH OPPORTUNITY</div>
+    <div class="hq-prompt-body">A quick field-research challenge just came up — answer a couple of questions for a bonus.</div>
+    <div class="hq-prompt-actions">
+      <button id="researchGoBtn" class="big-btn">Investigate</button>
+      <button id="researchDismissBtn" class="small-btn">Not now</button>
+    </div>
+  </div>
+
+  <div id="expedition" class="hidden">
+    <canvas id="expeditionBg"></canvas>
+    <div id="expeditionScroll">
+      <div id="expeditionContent"></div>
+    </div>
+  </div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

@@ -42,6 +42,7 @@ export function render(ctx, canvas, world, camera, animals, visitors, input, t) 
   }
 
   drawHQ(ctx, world, camera, size);
+  drawEntrance(ctx, world, camera, size);
 
   for (const v of visitors) {
     const s = camera.worldToScreen(v.x * TILE, v.y * TILE);
@@ -90,6 +91,52 @@ function drawHQ(ctx, world, camera, size) {
   ctx.stroke();
   ctx.fillStyle = '#d9a441';
   ctx.fillRect(topLeft.x + w * 0.85, topLeft.y - size * 0.85, size * 0.5, size * 0.3);
+}
+
+// A simple wooden-gateway entrance: two pillars, an archway beam, a hanging
+// sign, and short flanking rails suggesting the park boundary starts here.
+// This is a first pass for "clearly a recognizable entrance" — the fuller
+// pixel-art treatment (flags, torches, animation) comes in a later visual
+// pass, not this step.
+function drawEntrance(ctx, world, camera, size) {
+  const ent = world.entranceTile;
+  const topLeft = camera.worldToScreen((ent.x - 2) * TILE, (ent.y - 1) * TILE);
+  const w = size * 5, h = size * 3;
+
+  // plaza / welcome walkway
+  ctx.fillStyle = '#c9915a';
+  ctx.fillRect(topLeft.x, topLeft.y + h * 0.55, w, h * 0.5);
+
+  // pillars
+  ctx.fillStyle = '#6b4a28';
+  ctx.fillRect(topLeft.x + w * 0.08, topLeft.y + h * 0.15, size * 0.55, h * 0.7);
+  ctx.fillRect(topLeft.x + w * 0.92 - size * 0.55, topLeft.y + h * 0.15, size * 0.55, h * 0.7);
+
+  // archway beam
+  ctx.fillStyle = '#8a5a2a';
+  ctx.fillRect(topLeft.x + w * 0.04, topLeft.y + h * 0.08, w * 0.92, size * 0.32);
+
+  // hanging sign
+  ctx.fillStyle = '#3f7a3a';
+  ctx.fillRect(topLeft.x + w * 0.18, topLeft.y - size * 0.3, w * 0.64, size * 0.5);
+  ctx.strokeStyle = '#0f1509';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(topLeft.x + w * 0.18, topLeft.y - size * 0.3, w * 0.64, size * 0.5);
+  ctx.fillStyle = '#ffe066';
+  ctx.font = `bold ${Math.max(8, size * 0.2)}px monospace`;
+  ctx.textAlign = 'center';
+  ctx.fillText('SAFARI PARK ENTRANCE', topLeft.x + w / 2, topLeft.y - size * 0.03);
+  ctx.textAlign = 'left';
+
+  // low boundary rails flanking the gate
+  ctx.strokeStyle = '#5c3d1e';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(topLeft.x - size * 1.5, topLeft.y + h * 0.75);
+  ctx.lineTo(topLeft.x, topLeft.y + h * 0.75);
+  ctx.moveTo(topLeft.x + w, topLeft.y + h * 0.75);
+  ctx.lineTo(topLeft.x + w + size * 1.5, topLeft.y + h * 0.75);
+  ctx.stroke();
 }
 
 function drawCursor(ctx, world, camera, input, size) {

@@ -23,6 +23,17 @@ function seededRandom(seed) {
   };
 }
 
+// Fixed starting layout: the HQ sits near the map's center, and the Park
+// Entrance sits a bit further toward one edge (south), directly below it, so
+// a fresh park reads as "walk in from the entrance, up toward the research
+// station". Shared as a plain function (not tied to a World instance) so
+// Camera can use the same numbers to frame both landmarks by default.
+export function defaultLandmarks(mapW, mapH) {
+  const hqTile = { x: Math.floor(mapW / 2), y: Math.floor(mapH / 2) + 3 };
+  const entranceTile = { x: hqTile.x, y: hqTile.y + 10 };
+  return { hqTile, entranceTile };
+}
+
 export class World {
   constructor() {
     this.w = MAP_W;
@@ -34,7 +45,9 @@ export class World {
     this._nextHabitatId = 1;
     this.pathTiles = new Set();
     this.spawnTile = null;
-    this.hqTile = { x: Math.floor(this.w / 2), y: Math.floor(this.h / 2) + 3 };
+    const { hqTile, entranceTile } = defaultLandmarks(this.w, this.h);
+    this.hqTile = hqTile;
+    this.entranceTile = entranceTile;
     this.generateScenery();
   }
 
@@ -53,11 +66,17 @@ export class World {
   generateScenery() {
     const rand = seededRandom(1337);
     const hq = this.hqTile;
+    const entrance = this.entranceTile;
     for (let y = 0; y < this.h; y++) {
       for (let x = 0; x < this.w; x++) {
-        // keep a clear ring around the HQ for building
+        // keep a clear ring around the HQ, and another around the entrance —
+        // with the same radius and the two landmarks 10 tiles apart, the
+        // rings meet in the middle and form one continuous clear corridor
+        // connecting them, giving a new park an obvious starting build zone.
         const dx = x - hq.x, dy = y - hq.y;
         if (Math.abs(dx) < 6 && Math.abs(dy) < 5) continue;
+        const edx = x - entrance.x, edy = y - entrance.y;
+        if (Math.abs(edx) < 6 && Math.abs(edy) < 5) continue;
         const r = rand();
         if (r < 0.05) this.scenery[y][x] = { type: SCENERY.TREE, blocking: true };
         else if (r < 0.065) this.scenery[y][x] = { type: SCENERY.ROCK, blocking: true };
@@ -69,7 +88,7 @@ export class World {
 
   isBuildable(x, y) {
     if (!this.inBounds(x, y)) return false;
-    if (this.isHQTile(x, y)) return false;
+    if (this.isHQTile(x, y) || this.isEntranceTile(x, y)) return false;
     const sc = this.scenery[y][x];
     if (sc && sc.blocking) return false;
     return true;
@@ -80,10 +99,15 @@ export class World {
     return x >= hq.x - 2 && x <= hq.x + 2 && y >= hq.y - 1 && y <= hq.y + 1;
   }
 
+  isEntranceTile(x, y) {
+    const ent = this.entranceTile;
+    return x >= ent.x - 2 && x <= ent.x + 2 && y >= ent.y - 1 && y <= ent.y + 1;
+  }
+
   isWalkable(x, y) {
     // walkable for animals/flood-fill purposes: not fence, not blocking scenery, not HQ
     if (!this.inBounds(x, y)) return false;
-    if (this.isHQTile(x, y)) return false;
+    if (this.isHQTile(x, y) || this.isEntranceTile(x, y)) return false;
     const st = this.structures[y][x];
     if (st && (st.kind === STRUCTURE.FENCE)) return false;
     const sc = this.scenery[y][x];
@@ -162,8 +186,9 @@ export class World {
   }
 
   // Builds the set of walkable path tiles and finds the spawn point visitors
-  // enter/leave from: the path tile closest to the Expedition HQ. No path
-  // touching the HQ means no spawn point yet, so no visitors can enter.
+  // enter/leave from: the path tile closest to the Park Entrance. No path
+  // touching the entrance means no spawn point yet, so no visitors can enter —
+  // guests only ever come from the entrance, never from an arbitrary path.
   recomputePathNetwork() {
     this.pathTiles = new Set();
     for (let y = 0; y < this.h; y++) {
@@ -172,12 +197,12 @@ export class World {
       }
     }
 
-    const hq = this.hqTile;
+    const ent = this.entranceTile;
     let best = null, bestDist = Infinity;
-    for (let y = hq.y - 3; y <= hq.y + 3; y++) {
-      for (let x = hq.x - 4; x <= hq.x + 4; x++) {
+    for (let y = ent.y - 3; y <= ent.y + 3; y++) {
+      for (let x = ent.x - 4; x <= ent.x + 4; x++) {
         if (!this.isPathTile(x, y)) continue;
-        const dist = Math.abs(x - hq.x) + Math.abs(y - hq.y);
+        const dist = Math.abs(x - ent.x) + Math.abs(y - ent.y);
         if (dist < bestDist) { bestDist = dist; best = { x, y }; }
       }
     }

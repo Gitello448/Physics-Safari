@@ -1,4 +1,4 @@
-import { TILE, MAP_W, MAP_H } from './world.js';
+import { TILE, MAP_W, MAP_H, defaultLandmarks } from './world.js';
 
 export class Camera {
   constructor(canvas) {
@@ -7,8 +7,11 @@ export class Camera {
     // which may be scaled up by devicePixelRatio for crisp rendering on retina displays.
     this.viewW = canvas.width;
     this.viewH = canvas.height;
-    this.x = (MAP_W * TILE) / 2; // world px, center of view
-    this.y = (MAP_H * TILE) / 2 + 40;
+    // Default view frames the midpoint between the HQ and the Park Entrance,
+    // so a fresh park shows both landmarks without the player needing to pan.
+    const { hqTile, entranceTile } = defaultLandmarks(MAP_W, MAP_H);
+    this.x = (MAP_W * TILE) / 2;
+    this.y = ((hqTile.y + entranceTile.y) / 2) * TILE + TILE / 2;
     this.zoom = 1;
     this.minZoom = 0.5;
     this.maxZoom = 2.2;

@@ -25,6 +25,18 @@ export function computeReward(difficulty, correct, hintsUsed = 0) {
   };
 }
 
+// Level Test economy: credits come ONLY from here (not from per-question
+// answers — see PHYSICS_REWARDS above, which is now only used by the
+// separate "Research Opportunity" pop-up). Payout is per NEWLY-earned star,
+// not the full star total, so replaying an already-5-starred level doesn't
+// pay out again — see eduUI.js's level-test summary for the math.
+export const LEVEL_TEST = {
+  questionCount: 10,
+  passingStars: 4, // 4/5 stars = 80% = passing
+  creditsPerNewStar: 250,
+  perfectBonus: 250, // one-time bonus the first time a skill reaches 5 stars
+};
+
 // "Research Opportunity" pop-up events: occasional, optional physics
 // challenges surfaced during normal park play — NOT gating every purchase.
 export const RESEARCH_EVENT = {

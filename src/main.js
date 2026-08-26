@@ -11,6 +11,7 @@ import { buildSession } from './physics/practice.js';
 import { mulberry32, newSeed } from './physics/rng.js';
 import { createEduUI } from './eduUI.js';
 import { ExpeditionScenery } from './expeditionScenery.js';
+import { onAuthStateChange, signUp, signIn, signOut, ensurePlayerRows } from './auth.js';
 
 const SAVE_KEY = 'safari-scholar-save-v3';
 
@@ -58,6 +59,84 @@ devToggleBtn.addEventListener('click', () => setDevMode(!devMode));
 
 function canAfford(cost) { return devMode || credits >= cost; }
 function spend(cost) { if (!devMode) { credits -= cost; updateCreditsUI(); } }
+
+// --- Account (Phase 1: auth only — no game data synced to Supabase yet) ---
+const authBtn = document.getElementById('authBtn');
+const authBackdropEl = document.getElementById('authBackdrop');
+const authPanelEl = document.getElementById('authPanel');
+const authLoggedOutEl = document.getElementById('authLoggedOut');
+const authLoggedInEl = document.getElementById('authLoggedIn');
+const authEmailInput = document.getElementById('authEmail');
+const authPasswordInput = document.getElementById('authPassword');
+const authMessageEl = document.getElementById('authMessage');
+const authEmailDisplayEl = document.getElementById('authEmailDisplay');
+
+function showAuthPanel() {
+  authPanelEl.classList.remove('hidden');
+  authBackdropEl.classList.remove('hidden');
+  setAuthMessage('');
+}
+function hideAuthPanel() {
+  authPanelEl.classList.add('hidden');
+  authBackdropEl.classList.add('hidden');
+}
+function setAuthMessage(text, isSuccess = false) {
+  authMessageEl.textContent = text;
+  authMessageEl.classList.toggle('hidden', !text);
+  authMessageEl.classList.toggle('success', isSuccess);
+}
+
+authBtn.addEventListener('click', showAuthPanel);
+authBackdropEl.addEventListener('click', hideAuthPanel);
+document.getElementById('authCancelBtn').addEventListener('click', hideAuthPanel);
+
+document.getElementById('authSignInBtn').addEventListener('click', async () => {
+  const email = authEmailInput.value.trim();
+  const password = authPasswordInput.value;
+  if (!email || !password) { setAuthMessage('Enter both an email and password.'); return; }
+  setAuthMessage('Logging in…');
+  try {
+    await signIn(email, password);
+    setAuthMessage('');
+  } catch (e) {
+    setAuthMessage(e.message || 'Could not log in.');
+  }
+});
+
+document.getElementById('authSignUpBtn').addEventListener('click', async () => {
+  const email = authEmailInput.value.trim();
+  const password = authPasswordInput.value;
+  if (!email || !password) { setAuthMessage('Enter both an email and password.'); return; }
+  if (password.length < 6) { setAuthMessage('Password must be at least 6 characters.'); return; }
+  setAuthMessage('Creating account…');
+  try {
+    const data = await signUp(email, password);
+    if (data.session) {
+      setAuthMessage('');
+    } else {
+      setAuthMessage('Account created — check your email to confirm it, then log in.', true);
+    }
+  } catch (e) {
+    setAuthMessage(e.message || 'Could not create account.');
+  }
+});
+
+document.getElementById('authSignOutBtn').addEventListener('click', async () => {
+  try { await signOut(); } catch (e) { /* ignore */ }
+});
+
+onAuthStateChange((session) => {
+  authBtn.classList.toggle('active', !!session);
+  if (session) {
+    authLoggedOutEl.classList.add('hidden');
+    authLoggedInEl.classList.remove('hidden');
+    authEmailDisplayEl.textContent = session.user.email;
+    ensurePlayerRows(session.user.id).catch((e) => console.warn('ensurePlayerRows failed', e));
+  } else {
+    authLoggedOutEl.classList.remove('hidden');
+    authLoggedInEl.classList.add('hidden');
+  }
+});
 
 const creditsEl = document.getElementById('creditsValue');
 const researchEl = document.getElementById('researchValue');

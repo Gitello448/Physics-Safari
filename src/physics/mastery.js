@@ -22,7 +22,15 @@ export const MASTERY_THRESHOLDS = {
 
 const EMPTY_STATS = Object.freeze({
   attempts: 0, correct: 0, incorrect: 0, hintsUsed: 0, maxDifficultyCorrect: 0, recent: [],
+  bestStars: 0, bestLevelPercent: 0,
 });
+
+// Star thresholds for a Level Test score: star N requires N*20% (so 4 stars
+// = 80% exactly, matching the "4 stars = passing" requirement). Below 20%
+// earns zero stars.
+export function starsForPercent(percent) {
+  return Math.min(5, Math.max(0, Math.floor(percent / 20)));
+}
 
 export class SkillMasteryStore {
   constructor(data = {}) {
@@ -86,6 +94,24 @@ export class SkillMasteryStore {
   // rather than vanishing entirely (spaced review of mastered material).
   weightFor(skillId) {
     return Math.max(MASTERY_THRESHOLDS.masteredSelectionFloor, 1 - this.masteryScore(skillId));
+  }
+
+  // Records a Level Test result (as opposed to a single-question attempt).
+  // Only the BEST star rating ever earned is kept, and credit payout
+  // (computed by the caller) is meant to only cover newly-earned stars —
+  // this method just reports what's new so the caller can do that math.
+  recordLevelTestResult(skillId, percent) {
+    const prev = this.get(skillId);
+    const stars = starsForPercent(percent);
+    const prevBestStars = prev.bestStars || 0;
+    const bestStars = Math.max(prevBestStars, stars);
+    const bestLevelPercent = Math.max(prev.bestLevelPercent || 0, percent);
+    this.bySkill.set(skillId, { ...prev, bestStars, bestLevelPercent });
+    return { stars, prevBestStars, bestStars, newStars: Math.max(0, bestStars - prevBestStars), passed: stars >= 4 };
+  }
+
+  bestStars(skillId) {
+    return this.get(skillId).bestStars || 0;
   }
 
   recommendedDifficulty(skillId) {

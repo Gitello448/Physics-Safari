@@ -202,6 +202,52 @@ html, body {
   text-align: center;
 }
 #hqPrompt.hidden { display: none; }
+
+#authBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 19;
+  background: rgba(0,0,0,0.35);
+}
+#authBackdrop.hidden { display: none; }
+
+#authPanel {
+  position: fixed;
+  top: 38%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+  padding: 20px 26px;
+  width: 340px;
+  text-align: center;
+}
+#authPanel.hidden { display: none; }
+
+.auth-input {
+  display: block;
+  width: 100%;
+  margin-bottom: 10px;
+  box-sizing: border-box;
+}
+
+.auth-message {
+  font-size: 12px;
+  line-height: 1.5;
+  margin-bottom: 10px;
+  color: #ffb347;
+}
+.auth-message.hidden { display: none; }
+#authLoggedOut.hidden { display: none; }
+#authLoggedIn.hidden { display: none; }
+.auth-message.success { color: #7CFC00; }
+
+.auth-email-display {
+  font-size: 13px;
+  color: #9fc9ff;
+  margin-bottom: 12px;
+  word-break: break-all;
+}
+
 .hq-prompt-title {
   font-size: 16px;
   color: #ffe066;
@@ -435,6 +481,50 @@ html, body {
 .summary-mastery {
   color: #9fc9ff;
   font-size: 13px;
+}
+
+.stars-badge {
+  font-size: 15px;
+  color: #ffe066;
+  letter-spacing: 1px;
+}
+
+.skill-detail-stars {
+  text-align: center;
+  font-size: 32px;
+  color: #ffe066;
+  letter-spacing: 4px;
+  margin: 10px 0 4px;
+}
+
+.level-stars-big {
+  font-size: 30px;
+  color: #ffe066;
+  letter-spacing: 4px;
+}
+
+.pass-banner {
+  font-size: 18px;
+  color: #7CFC00;
+  font-weight: bold;
+}
+
+.fail-banner {
+  font-size: 18px;
+  color: #ffb347;
+  font-weight: bold;
+}
+
+.unlock-banner {
+  margin-top: 6px;
+  padding: 10px 16px;
+  font-size: 14px;
+  color: #ffe066;
+  background: rgba(255,224,102,0.08);
+  box-shadow: inset 0 0 0 2px #ffe066;
+  border-radius: 2px;
+  text-align: center;
+  line-height: 1.6;
 }
 
 .diagram-canvas {

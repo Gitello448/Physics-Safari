@@ -33,6 +33,9 @@
       <button class="tool-btn" id="eduHomeBtn" title="Curriculum, Practice Mode, Equation Sheet, Exam Review">📘</button>
     </div>
     <div class="tool-group">
+      <button class="tool-btn" id="authBtn" title="Sign In / Create Account">👤</button>
+    </div>
+    <div class="tool-group">
       <button class="tool-btn" id="devModeToggle" title="Toggle Development Mode (unlimited credits for testing)">🛠</button>
     </div>
   </div>
@@ -55,6 +58,34 @@
     <div class="hq-prompt-actions">
       <button id="researchGoBtn" class="big-btn">Investigate</button>
       <button id="researchDismissBtn" class="small-btn">Not now</button>
+    </div>
+  </div>
+
+  <div id="authBackdrop" class="hidden"></div>
+  <div id="authPanel" class="pixel-panel hidden">
+    <div class="hq-prompt-title">SAFARI SCHOLAR ACCOUNT</div>
+
+    <div id="authLoggedOut">
+      <div class="hq-prompt-body">Create an account to save your progress and play from any computer.</div>
+      <input id="authEmail" type="email" placeholder="email" class="numeric-input auth-input" autocomplete="username" />
+      <input id="authPassword" type="password" placeholder="password (6+ characters)" class="numeric-input auth-input" autocomplete="current-password" />
+      <div id="authMessage" class="auth-message hidden"></div>
+      <div class="hq-prompt-actions">
+        <button id="authSignInBtn" class="big-btn">LOG IN</button>
+        <button id="authSignUpBtn" class="small-btn">Create Account</button>
+      </div>
+    </div>
+
+    <div id="authLoggedIn" class="hidden">
+      <div id="authEmailDisplay" class="auth-email-display"></div>
+      <div class="hq-prompt-body">You're signed in. (Your park still only saves locally for now — cloud save comes next.)</div>
+      <div class="hq-prompt-actions">
+        <button id="authSignOutBtn" class="big-btn">LOG OUT</button>
+      </div>
+    </div>
+
+    <div class="hq-prompt-actions" style="margin-top:8px;">
+      <button id="authCancelBtn" class="small-btn">Close</button>
     </div>
   </div>
 

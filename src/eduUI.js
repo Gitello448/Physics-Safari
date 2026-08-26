@@ -13,18 +13,13 @@ import { generateProblem } from './physics/generator.js';
 import { checkAnswer } from './physics/validate.js';
 import { equationsForChapter } from './physics/equations.js';
 import { EXAM_RANGES, buildSession } from './physics/practice.js';
-import { MASTERY_STATUS } from './physics/mastery.js';
-import { computeReward } from './physics/rewards.js';
+import { computeReward, LEVEL_TEST } from './physics/rewards.js';
 import { mulberry32, newSeed } from './physics/rng.js';
 import { drawDiagram } from './physics/diagrams.js';
 
-const STATUS_LABEL = {
-  [MASTERY_STATUS.LOCKED]: '🔒 Locked',
-  [MASTERY_STATUS.AVAILABLE]: 'Available',
-  [MASTERY_STATUS.LEARNING]: 'Learning',
-  [MASTERY_STATUS.PROFICIENT]: 'Proficient',
-  [MASTERY_STATUS.MASTERED]: '✓ Mastered',
-};
+function starString(n) {
+  return '★'.repeat(n) + '☆'.repeat(5 - n);
+}
 
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({
@@ -72,19 +67,23 @@ export function createEduUI({ root, mastery, isDevMode, awardCredits, awardResea
     root.querySelector('#expBack').addEventListener('click', close);
   }
 
-  // ---- GO ON SAFARI (rewarded chapter → skill → session) ----------------
+  // ---- GO ON SAFARI / Curriculum & Mastery (same browsing either way — ----
+  // ---- credits now come from Level Tests, not from where you entered) ----
   function showGoOnSafari() {
-    showChapterList({ rewarded: true, backLabel: '← Return to Park', onBack: close, headerNote: '🪙 Rewarded — correct answers earn credits & research points' });
+    showChapterList({ backLabel: '← Return to Park', onBack: close });
+  }
+  function showCurriculum() {
+    showChapterList({ backLabel: '← Back to Menu', onBack: showHome });
   }
 
-  function showChapterList({ rewarded, backLabel, onBack, headerNote }) {
+  function showChapterList({ backLabel, onBack }) {
     screen = 'chapters';
     const chapters = getChapters();
     const rows = chapters.map((ch) => {
       const unlocked = chapterUnlocked(ch.id);
-      const masteredCount = ch.skills.filter((s) => mastery.status(s.id, { hasContent: skillHasContent(s.id) }) === MASTERY_STATUS.MASTERED).length;
+      const passedCount = ch.skills.filter((s) => mastery.bestStars(s.id) >= LEVEL_TEST.passingStars).length;
       const badge = chapterHasContent(ch.id)
-        ? `${masteredCount}/${ch.skills.length} mastered`
+        ? (passedCount === ch.skills.length ? 'COMPLETE ✓' : `${passedCount}/${ch.skills.length} levels passed`)
         : (unlocked ? 'dev-unlocked · no content yet' : '🔒 coming soon');
       return `
         <button class="chapter-btn" data-chapter="${ch.id}" ${unlocked ? '' : 'disabled'}>
@@ -94,59 +93,94 @@ export function createEduUI({ root, mastery, isDevMode, awardCredits, awardResea
     }).join('');
 
     render(`
-      <div class="exp-header">${rewarded ? 'CHOOSE YOUR SAFARI' : 'CURRICULUM &amp; MASTERY'}</div>
-      <div class="exp-subheader">${headerNote || 'Pick a chapter to see its skills.'}</div>
+      <div class="exp-header">CHOOSE YOUR SAFARI</div>
+      <div class="exp-subheader">Pick a chapter to see its levels.</div>
       <div class="exp-list">${rows}</div>
       <div class="exp-actions" style="justify-content:flex-start;margin-top:24px;">
         <button class="small-btn" id="expBack">${backLabel}</button>
       </div>
     `);
     root.querySelectorAll('[data-chapter]:not([disabled])').forEach((btn) => {
-      btn.addEventListener('click', () => showSkillList(btn.dataset.chapter, { rewarded, onBack: () => showChapterList({ rewarded, backLabel, onBack, headerNote }) }));
+      btn.addEventListener('click', () => showSkillList(btn.dataset.chapter, { onBack: () => showChapterList({ backLabel, onBack }) }));
     });
     root.querySelector('#expBack').addEventListener('click', onBack);
   }
 
-  function showSkillList(chapterId, { rewarded, onBack }) {
+  // Sections within a chapter unlock in order: a section is playable once
+  // the section before it has reached 4+ stars (or it's the first one).
+  // Dev mode's "unlock all" bypasses this for testing.
+  function skillSequentialState(ch) {
+    const bypass = isDevMode() && devUnlockAll;
+    let chainUnlocked = true;
+    return ch.skills.map((s) => {
+      const hasContent = skillHasContent(s.id);
+      const sequentiallyUnlocked = bypass || chainUnlocked;
+      const playable = hasContent && sequentiallyUnlocked;
+      if (hasContent) chainUnlocked = chainUnlocked && mastery.bestStars(s.id) >= LEVEL_TEST.passingStars;
+      return { skill: s, hasContent, playable };
+    });
+  }
+
+  function showSkillList(chapterId, { onBack }) {
     screen = 'skills';
     const ch = getChapter(chapterId);
-    const rows = ch.skills.map((s) => {
-      const hasContent = skillHasContent(s.id);
-      const status = mastery.status(s.id, { hasContent });
-      const stats = mastery.get(s.id);
-      const acc = stats.attempts > 0 ? Math.round((stats.correct / stats.attempts) * 100) : 0;
-      const disabled = !hasContent && !(isDevMode() && devUnlockAll);
-      const statusClass = status === MASTERY_STATUS.MASTERED ? 'mastered' : status === MASTERY_STATUS.PROFICIENT ? 'proficient' : status === MASTERY_STATUS.LEARNING ? 'in-progress' : '';
+    const states = skillSequentialState(ch);
+    const rows = states.map(({ skill: s, hasContent, playable }) => {
+      const stars = mastery.bestStars(s.id);
+      const passed = stars >= LEVEL_TEST.passingStars;
+      const statusClass = passed ? 'mastered' : stars > 0 ? 'in-progress' : '';
+      const label = !hasContent ? '🔒 coming soon' : !playable ? '🔒 complete previous level' : starString(stars);
       return `
-        <button class="concept-btn ${statusClass}" data-skill="${s.id}" ${disabled ? 'disabled' : ''}>
+        <button class="concept-btn ${statusClass}" data-skill="${s.id}" ${playable ? '' : 'disabled'}>
           <span>${escapeHtml(s.title)}</span>
-          <span class="exp-badge" style="display:flex;align-items:center;gap:8px;">
-            ${hasContent ? `<span class="progress-bar-track"><span class="progress-bar-fill ${status === MASTERY_STATUS.MASTERED ? 'mastered' : ''}" style="width:${acc}%"></span></span>` : ''}
-            ${hasContent ? STATUS_LABEL[status] : '🔒 coming soon'}
-          </span>
+          <span class="exp-badge stars-badge">${label}</span>
         </button>`;
     }).join('');
 
     render(`
       <div class="exp-nav"><button class="small-btn" id="expToChapters">← Chapters</button></div>
       <div class="exp-header">${escapeHtml(ch.title.toUpperCase())}</div>
-      <div class="exp-subheader">${rewarded ? '🪙 Rewarded session' : 'Free practice — select a skill'}</div>
+      <div class="exp-subheader">Complete a level's Level Test at ★★★★☆ (80%) or better to unlock the next.</div>
       <div class="exp-list">${rows}</div>
     `);
     root.querySelectorAll('[data-skill]:not([disabled])').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const rng = mulberry32(newSeed());
-        const queue = buildSession({ mode: 'skill', skillId: btn.dataset.skill, count: 6 }, { mastery, rng });
-        const skillTitle = ch.skills.find((s) => s.id === btn.dataset.skill)?.title || btn.dataset.skill;
-        startSession(queue, { rewarded, label: skillTitle, onFinish: () => showSkillList(chapterId, { rewarded, onBack }) });
-      });
+      btn.addEventListener('click', () => showSkillDetail(chapterId, btn.dataset.skill, { onBack: () => showSkillList(chapterId, { onBack }) }));
     });
     root.querySelector('#expToChapters').addEventListener('click', onBack);
   }
 
-  // ---- Curriculum & Mastery (free browsing) ------------------------------
-  function showCurriculum() {
-    showChapterList({ rewarded: false, backLabel: '← Back to Menu', onBack: showHome, headerNote: 'Pick a chapter to see its skills and mastery.' });
+  function showSkillDetail(chapterId, skillId, { onBack }) {
+    screen = 'skillDetail';
+    const ch = getChapter(chapterId);
+    const skill = ch.skills.find((s) => s.id === skillId);
+    const stats = mastery.get(skillId);
+    const stars = stats.bestStars || 0;
+    const passed = stars >= LEVEL_TEST.passingStars;
+    render(`
+      <div class="exp-nav"><button class="small-btn" id="expToSkills">← ${escapeHtml(ch.title)}</button></div>
+      <div class="exp-header">${escapeHtml(skill.title.toUpperCase())}</div>
+      <div class="skill-detail-stars">${starString(stars)}</div>
+      <div class="exp-subheader">${stats.bestLevelPercent ? `Best Level Test score: ${Math.round(stats.bestLevelPercent)}%` : 'Not yet attempted'} ${passed ? '· PASSED' : ''}</div>
+      <div class="exp-list" style="margin-top:20px;">
+        <button class="chapter-btn" id="goPractice"><span>📖 Practice</span><span class="exp-badge">free · unlimited</span></button>
+        <button class="chapter-btn" id="goLevelTest"><span>🎯 Level Test</span><span class="exp-badge">${LEVEL_TEST.questionCount} questions · earns stars &amp; credits</span></button>
+      </div>
+      <div class="exp-actions" style="justify-content:flex-start;margin-top:18px;">
+        <button class="small-btn" id="expBack">← Back</button>
+      </div>
+    `);
+    root.querySelector('#goPractice').addEventListener('click', () => {
+      const rng = mulberry32(newSeed());
+      const queue = buildSession({ mode: 'skill', skillId, count: 6 }, { mastery, rng });
+      startSession(queue, { kind: 'practice', rewarded: false, label: `Practice — ${skill.title}`, onFinish: () => showSkillDetail(chapterId, skillId, { onBack }) });
+    });
+    root.querySelector('#goLevelTest').addEventListener('click', () => {
+      const rng = mulberry32(newSeed());
+      const queue = buildSession({ mode: 'skill', skillId, count: LEVEL_TEST.questionCount }, { mastery, rng });
+      startSession(queue, { kind: 'levelTest', rewarded: false, label: skill.title, chapterId, skillId, onFinish: () => showSkillDetail(chapterId, skillId, { onBack }) });
+    });
+    root.querySelector('#expToSkills').addEventListener('click', onBack);
+    root.querySelector('#expBack').addEventListener('click', onBack);
   }
 
   // ---- Practice Mode ------------------------------------------------------
@@ -321,10 +355,13 @@ export function createEduUI({ root, mastery, isDevMode, awardCredits, awardResea
   }
 
   // ---- Shared question-session runner ---------------------------------------
-  function startSession(queue, { rewarded, label, onFinish, forcedArchetype = false }) {
-    session = { queue, index: 0, rewarded, label, onFinish, results: [], creditsEarned: 0, researchEarned: 0, masteryBefore: {}, forcedArchetype };
-    for (const { skillId } of queue) {
-      if (skillId && !(skillId in session.masteryBefore)) session.masteryBefore[skillId] = mastery.accuracy(skillId);
+  function startSession(queue, { rewarded, label, onFinish, forcedArchetype = false, kind = null, chapterId = null, skillId = null }) {
+    session = {
+      queue, index: 0, rewarded, label, onFinish, forcedArchetype, kind, chapterId, skillId,
+      results: [], creditsEarned: 0, researchEarned: 0, masteryBefore: {},
+    };
+    for (const { skillId: sid } of queue) {
+      if (sid && !(sid in session.masteryBefore)) session.masteryBefore[sid] = mastery.accuracy(sid);
     }
     showQuestion();
   }
@@ -463,7 +500,7 @@ export function createEduUI({ root, mastery, isDevMode, awardCredits, awardResea
     const isLast = session.index >= session.queue.length - 1;
     root.querySelector('#questionActions').innerHTML = `<button class="big-btn" id="nextBtn">${isLast ? 'Finish Session' : 'Next Question'}</button>`;
     root.querySelector('#nextBtn').addEventListener('click', () => {
-      if (isLast) showSummary();
+      if (isLast) { session.kind === 'levelTest' ? showLevelTestSummary() : showSummary(); }
       else { session.index++; showQuestion(); }
     });
   }
@@ -482,6 +519,83 @@ export function createEduUI({ root, mastery, isDevMode, awardCredits, awardResea
         <div class="feedback-explanation"><b>Interpretation:</b> ${escapeHtml(sol.interpretation)}</div>
       </div>
     `;
+  }
+
+  // Credits ONLY come from Level Tests, and only for NEWLY-earned stars —
+  // replaying a level you've already 5-starred earns no further payout.
+  // This is the anti-farming rule from the design brief.
+  function showLevelTestSummary() {
+    screen = 'levelTestSummary';
+    const total = session.results.length;
+    const correctCount = session.results.filter((r) => r.correct).length;
+    const percent = (correctCount / total) * 100;
+    const { stars, prevBestStars, newStars, passed } = mastery.recordLevelTestResult(session.skillId, percent);
+
+    let payout = newStars * LEVEL_TEST.creditsPerNewStar;
+    if (stars === 5 && prevBestStars < 5) payout += LEVEL_TEST.perfectBonus;
+    if (payout > 0) awardCredits(payout);
+
+    const ch = getChapter(session.chapterId);
+    const skill = ch.skills.find((s) => s.id === session.skillId);
+    const skillIndex = ch.skills.findIndex((s) => s.id === session.skillId);
+    const nextSkill = ch.skills[skillIndex + 1] || null;
+    const justUnlockedNext = passed && prevBestStars < LEVEL_TEST.passingStars && nextSkill;
+
+    if (passed) {
+      render(`
+        <div class="exp-header">EXPEDITION COMPLETE</div>
+        <div class="summary-stats">
+          <div class="summary-mastery" style="font-size:16px;">${escapeHtml(skill.title.toUpperCase())}</div>
+          <div class="level-stars-big">${starString(stars)}</div>
+          <div class="summary-big">${correctCount} / ${total} Correct</div>
+          <div class="summary-mastery pass-banner">LEVEL PASSED!</div>
+          ${payout > 0 ? `<div class="summary-credits">+${payout.toLocaleString()} Safari Credits</div>` : '<div class="summary-mastery">No new credits — you already earned this level\'s stars before.</div>'}
+          ${justUnlockedNext ? `<div class="summary-mastery unlock-banner">NEW EXPEDITION UNLOCKED<br>${escapeHtml(nextSkill.title)}</div>` : ''}
+          <div class="exp-actions" style="justify-content:center;flex-wrap:wrap;">
+            <button class="big-btn" id="returnBtn">RETURN TO SAFARI</button>
+            ${nextSkill ? '<button class="big-btn" id="nextLevelBtn">CONTINUE TO NEXT LEVEL</button>' : ''}
+            ${stars < 5 ? '<button class="small-btn" id="retryBtn">RETRY FOR ★★★★★</button>' : ''}
+          </div>
+        </div>
+      `);
+    } else {
+      render(`
+        <div class="exp-header">LEVEL RESULTS</div>
+        <div class="summary-stats">
+          <div class="summary-mastery" style="font-size:16px;">${escapeHtml(skill.title.toUpperCase())}</div>
+          <div class="level-stars-big">${starString(stars)}</div>
+          <div class="summary-big">${correctCount} / ${total} Correct</div>
+          <div class="summary-mastery fail-banner">NOT YET MASTERED</div>
+          <div class="summary-mastery">You need 80% (★★★★☆) to continue. You're close — review and try again.</div>
+          <div class="exp-actions" style="justify-content:center;flex-wrap:wrap;">
+            <button class="small-btn" id="reviewBtn">REVIEW CONCEPT</button>
+            <button class="small-btn" id="practiceBtn">PRACTICE AGAIN</button>
+            <button class="big-btn" id="retryBtn">RETRY LEVEL</button>
+          </div>
+        </div>
+      `);
+    }
+
+    const finish = session.onFinish;
+    const { chapterId, skillId } = session;
+    root.querySelector('#returnBtn')?.addEventListener('click', () => { session = null; current = null; onClose(); });
+    root.querySelector('#nextLevelBtn')?.addEventListener('click', () => {
+      session = null; current = null;
+      showSkillDetail(chapterId, nextSkill.id, { onBack: () => showSkillList(chapterId, { onBack: showHome }) });
+    });
+    root.querySelector('#retryBtn')?.addEventListener('click', () => {
+      session = null; current = null;
+      const rng = mulberry32(newSeed());
+      const queue = buildSession({ mode: 'skill', skillId, count: LEVEL_TEST.questionCount }, { mastery, rng });
+      startSession(queue, { kind: 'levelTest', rewarded: false, label: skill.title, chapterId, skillId, onFinish: finish });
+    });
+    root.querySelector('#practiceBtn')?.addEventListener('click', () => {
+      session = null; current = null;
+      const rng = mulberry32(newSeed());
+      const queue = buildSession({ mode: 'skill', skillId, count: 6 }, { mastery, rng });
+      startSession(queue, { kind: 'practice', rewarded: false, label: `Practice — ${skill.title}`, onFinish: finish });
+    });
+    root.querySelector('#reviewBtn')?.addEventListener('click', () => { session = null; current = null; showEquationSheet(); });
   }
 
   function showSummary() {

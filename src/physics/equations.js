@@ -114,7 +114,58 @@ export const EQUATIONS_BY_CHAPTER = {
       ],
     },
   ],
-  // Chapters 3+ will populate here as their archetypes are built.
+  ch3: [
+    {
+      id: 'components', equation: 'vx = v·cos(θ),  vy = v·sin(θ)',
+      variables: [
+        { symbol: 'v', meaning: 'velocity magnitude', unit: 'm/s' },
+        { symbol: 'θ', meaning: 'angle above the horizontal', unit: 'degrees' },
+        { symbol: 'vx, vy', meaning: 'horizontal and vertical components', unit: 'm/s' },
+      ],
+    },
+    {
+      id: 'time-of-flight', equation: 't = 2v0sin(θ) / g',
+      variables: [
+        { symbol: 't', meaning: 'total time in the air (launch height = landing height)', unit: 's' },
+        { symbol: 'v0', meaning: 'launch speed', unit: 'm/s' },
+        { symbol: 'θ', meaning: 'launch angle above horizontal', unit: 'degrees' },
+        { symbol: 'g', meaning: 'acceleration due to gravity', unit: 'm/s²' },
+      ],
+    },
+    {
+      id: 'max-height', equation: 'h = (v0sin(θ))² / (2g)',
+      variables: [
+        { symbol: 'h', meaning: 'maximum height above launch point', unit: 'm' },
+        { symbol: 'v0', meaning: 'launch speed', unit: 'm/s' },
+        { symbol: 'θ', meaning: 'launch angle above horizontal', unit: 'degrees' },
+      ],
+    },
+    {
+      id: 'range', equation: 'R = v0²sin(2θ) / g',
+      variables: [
+        { symbol: 'R', meaning: 'horizontal range (launch height = landing height)', unit: 'm' },
+        { symbol: 'v0', meaning: 'launch speed', unit: 'm/s' },
+        { symbol: 'θ', meaning: 'launch angle above horizontal', unit: 'degrees' },
+      ],
+    },
+    {
+      id: 'velocity-at-time', equation: 'vx(t) = v0cos(θ),  vy(t) = v0sin(θ) − gt',
+      variables: [
+        { symbol: 'vx(t), vy(t)', meaning: 'velocity components at time t', unit: 'm/s' },
+        { symbol: 'v0, θ', meaning: 'launch speed and angle', unit: 'm/s, degrees' },
+        { symbol: 't', meaning: 'elapsed time since launch', unit: 's' },
+      ],
+    },
+    {
+      id: 'resultant-vector', equation: 'v = √(vx² + vy²),  θ = tan⁻¹(vy / vx)',
+      variables: [
+        { symbol: 'vx, vy', meaning: 'velocity (or displacement) components', unit: 'm/s (or m)' },
+        { symbol: 'v', meaning: 'magnitude of the resultant', unit: 'same as components' },
+        { symbol: 'θ', meaning: 'direction from the +x axis', unit: 'degrees' },
+      ],
+    },
+  ],
+  // Chapters 4+ will populate here as their archetypes are built.
 };
 
 export function equationsForChapter(chapterId) {

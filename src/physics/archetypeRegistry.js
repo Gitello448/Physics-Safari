@@ -4,8 +4,9 @@
 
 import { CH1_ARCHETYPES } from './ch1archetypes.js';
 import { CH2_ARCHETYPES } from './ch2archetypes.js';
+import { CH3_ARCHETYPES } from './ch3archetypes.js';
 
-const ALL_ARCHETYPES = [...CH1_ARCHETYPES, ...CH2_ARCHETYPES];
+const ALL_ARCHETYPES = [...CH1_ARCHETYPES, ...CH2_ARCHETYPES, ...CH3_ARCHETYPES];
 
 const BY_SKILL = new Map();
 const BY_ID = new Map();

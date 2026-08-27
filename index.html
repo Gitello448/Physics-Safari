@@ -19,15 +19,13 @@
   <div id="toolbar" class="pixel-panel">
     <div class="tool-group">
       <button class="tool-btn" data-tool="pan" title="Pan / Select">✋</button>
-      <button class="tool-btn" data-tool="path" title="Dirt Path — 🪙10">🛤️</button>
-      <button class="tool-btn" data-tool="fence" title="Wood Fence — 🪙15">🚧</button>
-      <button class="tool-btn" data-tool="gate" title="Gate — 🪙25">🚪</button>
       <button class="tool-btn" data-tool="delete" title="Remove">🗑️</button>
     </div>
-    <div class="tool-group" id="animalTools">
-      <button class="tool-btn" data-tool="animal:zebra" title="Zebra — 🪙500">🦓</button>
-      <button class="tool-btn" data-tool="animal:giraffe" title="Giraffe — 🪙800">🦒</button>
-      <button class="tool-btn" data-tool="animal:rhino" title="Rhino — 🪙1200">🦏</button>
+    <div class="tool-group">
+      <button class="tool-btn" data-category="building" title="Building Supplies">🏗️</button>
+      <button class="tool-btn" data-category="animals" title="Animals">🦓</button>
+      <button class="tool-btn" data-category="decor" title="Decor">🌳</button>
+      <button class="tool-btn" data-category="attractions" title="Attractions">🎡</button>
     </div>
     <div class="tool-group">
       <button class="tool-btn" id="eduHomeBtn" title="Curriculum, Practice Mode, Equation Sheet, Exam Review">📘</button>
@@ -41,6 +39,12 @@
   </div>
 
   <div id="hint" class="pixel-panel">Right-drag or arrow keys to pan · Scroll to zoom</div>
+
+  <div id="shopBackdrop" class="hidden"></div>
+  <div id="shopPanel" class="pixel-panel hidden">
+    <div class="shop-panel-title" id="shopPanelTitle">BUILDING SUPPLIES</div>
+    <div class="shop-grid" id="shopGrid"></div>
+  </div>
 
   <div id="hqBackdrop" class="hidden"></div>
   <div id="hqPrompt" class="pixel-panel hidden">

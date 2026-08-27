@@ -40,6 +40,12 @@ export class World {
     this.h = MAP_H;
     this.scenery = this.emptyGrid(null);
     this.structures = this.emptyGrid(null);
+    // Purchased decorations (acacia/baobab/cactus/cherry-blossom, etc.) —
+    // deliberately kept separate from `scenery` (naturally-generated, requires
+    // the Clear tool) and from `structures` (paths/fences/gates, which drive
+    // path-network/enclosure connectivity). A decoration just occupies and
+    // blocks its tile, like blocking scenery does.
+    this.decorations = this.emptyGrid(null);
     this.habitatId = this.emptyGrid(-1);
     this.habitats = new Map(); // id -> {tiles:Set<"x,y">, enclosed:bool}
     this._nextHabitatId = 1;
@@ -91,6 +97,7 @@ export class World {
     if (this.isHQTile(x, y) || this.isEntranceTile(x, y)) return false;
     const sc = this.scenery[y][x];
     if (sc && sc.blocking) return false;
+    if (this.decorations[y][x]) return false;
     return true;
   }
 
@@ -112,6 +119,7 @@ export class World {
     if (st && (st.kind === STRUCTURE.FENCE)) return false;
     const sc = this.scenery[y][x];
     if (sc && sc.blocking) return false;
+    if (this.decorations[y][x]) return false;
     return true;
   }
 
@@ -341,6 +349,79 @@ export class World {
   // it's the same deterministic map for every account, not part of any save.
   clearStructures() {
     this.structures = this.emptyGrid(null);
+    this.recomputeNetworks();
+  }
+
+  // (x,y) is the top-left anchor tile; footprint is {w,h} in tiles (both
+  // default to 1 for anything that doesn't pass one). Every tile in the
+  // footprint gets its own grid entry pointing back at the shared anchor,
+  // so clicking ANY tile of a multi-tile decoration (e.g. for removal)
+  // resolves to the same instance.
+  decorationFootprintClear(x, y, footprint) {
+    const w = (footprint && footprint.w) || 1, h = (footprint && footprint.h) || 1;
+    for (let dy = 0; dy < h; dy++) {
+      for (let dx = 0; dx < w; dx++) {
+        const tx = x + dx, ty = y + dy;
+        if (!this.inBounds(tx, ty)) return false;
+        if (!this.isBuildable(tx, ty)) return false;
+        if (this.structures[ty][tx]) return false;
+      }
+    }
+    return true;
+  }
+
+  placeDecoration(x, y, type, footprint) {
+    const w = (footprint && footprint.w) || 1, h = (footprint && footprint.h) || 1;
+    if (!this.decorationFootprintClear(x, y, { w, h })) return false;
+    for (let dy = 0; dy < h; dy++) {
+      for (let dx = 0; dx < w; dx++) {
+        this.decorations[y + dy][x + dx] = { type, w, h, anchorX: x, anchorY: y };
+      }
+    }
+    this.recomputeNetworks(); // a decoration blocks its tiles, which can affect habitat flood-fill
+    return true;
+  }
+
+  removeDecoration(x, y) {
+    if (!this.inBounds(x, y)) return false;
+    const d = this.decorations[y][x];
+    if (!d) return false;
+    for (let dy = 0; dy < d.h; dy++) {
+      for (let dx = 0; dx < d.w; dx++) {
+        const tx = d.anchorX + dx, ty = d.anchorY + dy;
+        if (this.inBounds(tx, ty)) this.decorations[ty][tx] = null;
+      }
+    }
+    this.recomputeNetworks();
+    return true;
+  }
+
+  exportDecorations() {
+    const list = [];
+    for (let y = 0; y < this.h; y++) {
+      for (let x = 0; x < this.w; x++) {
+        const d = this.decorations[y][x];
+        if (d && d.anchorX === x && d.anchorY === y) list.push({ x, y, type: d.type, w: d.w, h: d.h });
+      }
+    }
+    return list;
+  }
+
+  loadDecorations(list) {
+    for (const { x, y, type, w, h } of list) {
+      const ww = w || 1, hh = h || 1;
+      for (let dy = 0; dy < hh; dy++) {
+        for (let dx = 0; dx < ww; dx++) {
+          const tx = x + dx, ty = y + dy;
+          if (this.inBounds(tx, ty)) this.decorations[ty][tx] = { type, w: ww, h: hh, anchorX: x, anchorY: y };
+        }
+      }
+    }
+    this.recomputeNetworks();
+  }
+
+  clearDecorations() {
+    this.decorations = this.emptyGrid(null);
     this.recomputeNetworks();
   }
 

@@ -1,5 +1,5 @@
 import { TILE, STRUCTURE } from './world.js';
-import { drawGrassTile, drawTree, drawRock, drawBush, drawWater, drawPath, drawFence, drawAnimal, drawVisitor } from './sprites.js';
+import { drawGrassTile, drawTree, drawRock, drawBush, drawWater, drawPath, drawFence, drawAnimal, drawVisitor, drawDecoration } from './sprites.js';
 
 export function render(ctx, canvas, world, camera, animals, visitors, input, t) {
   ctx.imageSmoothingEnabled = false;
@@ -38,6 +38,15 @@ export function render(ctx, canvas, world, camera, animals, visitors, input, t) 
       else if (sc.type === 'rock') drawRock(ctx, s.x, s.y, size);
       else if (sc.type === 'bush') drawBush(ctx, s.x, s.y, size);
       else if (sc.type === 'water') drawWater(ctx, s.x, s.y, size, t);
+    }
+  }
+
+  for (let y = range.minY; y <= range.maxY; y++) {
+    for (let x = range.minX; x <= range.maxX; x++) {
+      const dec = world.decorations[y][x];
+      if (!dec || dec.anchorX !== x || dec.anchorY !== y) continue; // draw once, at the anchor tile
+      const s = camera.worldToScreen(x * TILE, y * TILE);
+      drawDecoration(ctx, s.x, s.y, size, dec.type, dec.w, dec.h);
     }
   }
 
@@ -251,7 +260,8 @@ function drawCursor(ctx, world, camera, input, size) {
   if (!world.inBounds(x, y)) return;
   const s = camera.worldToScreen(x * TILE, y * TILE);
   const valid = input.isPlacementValid ? input.isPlacementValid(x, y) : true;
+  const footprint = input.getFootprint ? input.getFootprint() : { w: 1, h: 1 };
   ctx.strokeStyle = valid ? 'rgba(255,224,102,0.9)' : 'rgba(255,80,80,0.9)';
   ctx.lineWidth = 2;
-  ctx.strokeRect(s.x + 1, s.y + 1, size - 2, size - 2);
+  ctx.strokeRect(s.x + 1, s.y + 1, size * footprint.w - 2, size * footprint.h - 2);
 }

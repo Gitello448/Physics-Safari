@@ -3,6 +3,7 @@ import { Camera } from './camera.js';
 import { attachInput } from './input.js';
 import { render } from './render.js';
 import { Animal, ANIMAL_DEFS } from './animals.js';
+import { DECORATION_DEFS } from './decorations.js';
 import { Visitor, pickDestination, computeAttractionScore, targetVisitorCount } from './visitors.js';
 import { BUILD_COSTS, PASSIVE_REVENUE, VISITORS } from './economy.js';
 import { SkillMasteryStore } from './physics/mastery.js';
@@ -386,14 +387,99 @@ function awardResearch(amount) {
 }
 
 let currentTool = 'pan';
-const toolButtons = document.querySelectorAll('.tool-btn[data-tool]');
-toolButtons.forEach((btn) => {
+
+// --- Shop menu: categorized flyout, replacing one long flat toolbar row ---
+// Pan/Remove are always-visible utility tools; everything purchasable lives
+// behind one of these category buttons and is rendered as name+price cards.
+const SHOP_CATEGORIES = {
+  building: {
+    title: 'Building Supplies',
+    items: [
+      { tool: 'path', icon: '🛤️', name: 'Dirt Path', price: BUILD_COSTS.path },
+      { tool: 'fence', icon: '🚧', name: 'Wood Fence', price: BUILD_COSTS.fence },
+      { tool: 'gate', icon: '🚪', name: 'Gate', price: BUILD_COSTS.gate },
+    ],
+  },
+  animals: {
+    title: 'Animals',
+    items: Object.entries(ANIMAL_DEFS).map(([key, def]) => ({ tool: `animal:${key}`, icon: def.icon, name: def.name, price: def.cost })),
+  },
+  decor: {
+    title: 'Decor',
+    items: Object.entries(DECORATION_DEFS).map(([key, def]) => ({ tool: `decoration:${key}`, icon: def.icon, name: def.name, price: def.cost })),
+  },
+  attractions: {
+    title: 'Attractions',
+    items: [], // nothing built yet — the category exists so the menu structure is ready
+  },
+};
+
+function footprintForTool(tool) {
+  if (tool.startsWith('decoration:')) return DECORATION_DEFS[tool.split(':')[1]].footprint;
+  return { w: 1, h: 1 };
+}
+
+const utilityButtons = Array.from(document.querySelectorAll('.tool-btn[data-tool]'));
+const categoryButtons = Array.from(document.querySelectorAll('.tool-btn[data-category]'));
+const shopBackdropEl = document.getElementById('shopBackdrop');
+const shopPanelEl = document.getElementById('shopPanel');
+const shopPanelTitleEl = document.getElementById('shopPanelTitle');
+const shopGridEl = document.getElementById('shopGrid');
+let openCategory = null;
+
+function updateToolbarActiveStates() {
+  utilityButtons.forEach((b) => b.classList.toggle('active', b.dataset.tool === currentTool));
+  categoryButtons.forEach((b) => {
+    const belongs = SHOP_CATEGORIES[b.dataset.category].items.some((item) => item.tool === currentTool);
+    b.classList.toggle('active', belongs);
+  });
+}
+
+function closeShopPanel() {
+  openCategory = null;
+  shopBackdropEl.classList.add('hidden');
+  shopPanelEl.classList.add('hidden');
+}
+
+function openShopPanel(catKey) {
+  openCategory = catKey;
+  const cat = SHOP_CATEGORIES[catKey];
+  shopPanelTitleEl.textContent = cat.title.toUpperCase();
+  shopGridEl.innerHTML = '';
+  if (cat.items.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'shop-empty';
+    empty.textContent = 'Coming soon.';
+    shopGridEl.appendChild(empty);
+  } else {
+    for (const item of cat.items) {
+      const btn = document.createElement('button');
+      btn.className = 'shop-item';
+      btn.innerHTML = `<span class="shop-item-icon">${item.icon}</span><span class="shop-item-name">${item.name}</span><span class="shop-item-price">🪙${item.price}</span>`;
+      btn.addEventListener('click', () => setCurrentTool(item.tool));
+      shopGridEl.appendChild(btn);
+    }
+  }
+  shopBackdropEl.classList.remove('hidden');
+  shopPanelEl.classList.remove('hidden');
+}
+
+function setCurrentTool(tool) {
+  currentTool = tool;
+  updateToolbarActiveStates();
+  closeShopPanel();
+}
+
+utilityButtons.forEach((btn) => btn.addEventListener('click', () => setCurrentTool(btn.dataset.tool)));
+categoryButtons.forEach((btn) => {
   btn.addEventListener('click', () => {
-    currentTool = btn.dataset.tool;
-    toolButtons.forEach((b) => b.classList.toggle('active', b === btn));
+    const key = btn.dataset.category;
+    if (openCategory === key) closeShopPanel();
+    else openShopPanel(key);
   });
 });
-toolButtons[0].classList.add('active');
+shopBackdropEl.addEventListener('click', closeShopPanel);
+updateToolbarActiveStates();
 
 function isPlacementValid(x, y) {
   if (currentTool === 'pan' || currentTool === 'delete') return true;
@@ -403,6 +489,9 @@ function isPlacementValid(x, y) {
   if (currentTool.startsWith('animal:')) {
     const habitat = world.habitatAt(x, y);
     return !!(habitat && habitat.enclosed && !animalAt(x, y));
+  }
+  if (currentTool.startsWith('decoration:')) {
+    return world.decorationFootprintClear(x, y, footprintForTool(currentTool));
   }
   return true;
 }
@@ -476,6 +565,10 @@ function onAction(x, y) {
     }
     if (world.removeStructure(x, y)) {
       persist();
+      return;
+    }
+    if (world.removeDecoration(x, y)) {
+      persist();
     }
     return;
   }
@@ -508,6 +601,19 @@ function onAction(x, y) {
     persist();
     return;
   }
+
+  if (currentTool.startsWith('decoration:')) {
+    const type = currentTool.split(':')[1];
+    const def = DECORATION_DEFS[type];
+    if (!world.decorationFootprintClear(x, y, def.footprint)) return;
+    if (!canAfford(def.cost)) { toast(`Not enough credits — need 🪙${def.cost}.`); return; }
+    if (world.placeDecoration(x, y, type, def.footprint)) {
+      spend(def.cost);
+      toast(`${def.name} planted!`);
+      persist();
+    }
+    return;
+  }
 }
 
 const input = attachInput(canvas, camera, {
@@ -516,6 +622,7 @@ const input = attachInput(canvas, camera, {
   isPlacementValid,
 });
 input.state.isPlacementValid = isPlacementValid;
+input.state.getFootprint = () => footprintForTool(currentTool);
 
 // Guest mode writes straight to localStorage; logged-in mode debounces a
 // write to that account's Supabase row instead (see cloud save wiring above).

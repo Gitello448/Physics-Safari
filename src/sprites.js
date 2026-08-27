@@ -103,6 +103,209 @@ export function drawPath(ctx, px, py, size, mask) {
   }
 }
 
+// Purchasable decorations — distinct silhouettes from the natural drawTree/
+// drawBush above, and deliberately bigger and more detailed (they occupy a
+// multi-tile footprint, spanW/spanH below), so a placed decoration always
+// reads as a grander, deliberate centerpiece rather than wild scenery.
+export function drawAcacia(ctx, px, py, spanW, spanH) {
+  const cx = px + spanW / 2;
+  const baseY = py + spanH * 0.94;
+  // ground shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.beginPath();
+  ctx.ellipse(cx, baseY, spanW * 0.32, spanH * 0.05, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // trunk with a bark-shade split and a couple of low branches
+  ctx.fillStyle = '#4a3520';
+  ctx.fillRect(cx - spanW * 0.035, py + spanH * 0.42, spanW * 0.07, spanH * 0.52);
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.fillRect(cx - spanW * 0.035, py + spanH * 0.42, spanW * 0.02, spanH * 0.52);
+  ctx.strokeStyle = '#4a3520';
+  ctx.lineWidth = Math.max(2, spanW * 0.03);
+  ctx.beginPath();
+  ctx.moveTo(cx, py + spanH * 0.46);
+  ctx.lineTo(cx - spanW * 0.24, py + spanH * 0.3);
+  ctx.moveTo(cx, py + spanH * 0.44);
+  ctx.lineTo(cx + spanW * 0.22, py + spanH * 0.26);
+  ctx.stroke();
+  // the flat, wide "umbrella" canopy acacias are famous for — three layered
+  // tiers so it reads as full and grand rather than a single flat disc
+  ctx.fillStyle = '#446b2c';
+  ctx.beginPath();
+  ctx.ellipse(cx, py + spanH * 0.22, spanW * 0.5, spanH * 0.11, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#5a8a3a';
+  ctx.beginPath();
+  ctx.ellipse(cx, py + spanH * 0.16, spanW * 0.42, spanH * 0.1, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#6fa048';
+  ctx.beginPath();
+  ctx.ellipse(cx - spanW * 0.08, py + spanH * 0.11, spanW * 0.26, spanH * 0.07, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.beginPath();
+  ctx.ellipse(cx + spanW * 0.12, py + spanH * 0.09, spanW * 0.14, spanH * 0.04, 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+export function drawBaobab(ctx, px, py, spanW, spanH) {
+  const cx = px + spanW / 2;
+  const baseY = py + spanH * 0.94;
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.beginPath();
+  ctx.ellipse(cx, baseY, spanW * 0.3, spanH * 0.05, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // flared, gnarled base
+  ctx.fillStyle = '#7a5c38';
+  ctx.beginPath();
+  ctx.ellipse(cx, py + spanH * 0.86, spanW * 0.24, spanH * 0.08, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // the massive, bulbous trunk baobabs are known for
+  ctx.fillStyle = '#8a6a42';
+  ctx.beginPath();
+  ctx.ellipse(cx, py + spanH * 0.58, spanW * 0.3, spanH * 0.38, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.16)';
+  ctx.beginPath();
+  ctx.ellipse(cx - spanW * 0.1, py + spanH * 0.58, spanW * 0.11, spanH * 0.34, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  ctx.beginPath();
+  ctx.ellipse(cx + spanW * 0.12, py + spanH * 0.5, spanW * 0.07, spanH * 0.24, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // sparse, gnarled crown of small branches with little leaf tufts at the
+  // tips — no big leafy canopy, that's the whole point of a baobab
+  ctx.strokeStyle = '#6b4e30';
+  ctx.lineWidth = Math.max(2, spanW * 0.035);
+  const branches = [[-0.2, -0.32], [0, -0.38], [0.2, -0.32], [-0.09, -0.4], [0.1, -0.4], [-0.28, -0.2], [0.28, -0.2]];
+  for (const [dx, dy] of branches) {
+    ctx.beginPath();
+    ctx.moveTo(cx, py + spanH * 0.24);
+    ctx.lineTo(cx + spanW * dx, py + spanH * (0.24 + dy));
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#5a8a3a';
+  for (const [dx, dy] of branches) {
+    ctx.beginPath();
+    ctx.arc(cx + spanW * dx, py + spanH * (0.24 + dy), spanW * 0.04, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+export function drawCactus(ctx, px, py, spanW, spanH) {
+  const cx = px + spanW / 2;
+  const baseY = py + spanH * 0.94;
+  ctx.fillStyle = 'rgba(0,0,0,0.16)';
+  ctx.beginPath();
+  ctx.ellipse(cx, baseY, spanW * 0.26, spanH * 0.045, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // a small grounding rock, since this is meant to read as a deliberate
+  // desert-garden centerpiece rather than a single lone plant
+  ctx.fillStyle = '#8a8578';
+  ctx.beginPath();
+  ctx.ellipse(cx + spanW * 0.22, py + spanH * 0.88, spanW * 0.09, spanH * 0.05, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  const bodyW = spanW * 0.16;
+  const bodyTop = py + spanH * 0.18;
+  const bodyBottom = py + spanH * 0.9;
+  ctx.fillStyle = '#3f8a4a';
+  ctx.fillRect(cx - bodyW / 2, bodyTop, bodyW, bodyBottom - bodyTop);
+  ctx.beginPath();
+  ctx.ellipse(cx, bodyTop, bodyW / 2, bodyW / 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#57a05f';
+  ctx.fillRect(cx - bodyW * 0.1, bodyTop, bodyW * 0.25, bodyBottom - bodyTop);
+
+  // two rounded arms, one higher than the other for a natural silhouette
+  const armW = spanW * 0.13;
+  ctx.fillStyle = '#3f8a4a';
+  ctx.fillRect(cx - spanW * 0.34, py + spanH * 0.42, armW, spanH * 0.34);
+  ctx.beginPath();
+  ctx.ellipse(cx - spanW * 0.34 + armW / 2, py + spanH * 0.42, armW / 2, armW / 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillRect(cx + spanW * 0.21, py + spanH * 0.3, armW, spanH * 0.42);
+  ctx.beginPath();
+  ctx.ellipse(cx + spanW * 0.21 + armW / 2, py + spanH * 0.3, armW / 2, armW / 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // a small bloom on top — a nice grand-garden touch real saguaros get
+  ctx.fillStyle = '#e88fb0';
+  ctx.beginPath();
+  ctx.arc(cx, bodyTop - spanW * 0.03, spanW * 0.045, 0, Math.PI * 2);
+  ctx.fill();
+
+  // spine highlights along the trunk and both arms
+  ctx.fillStyle = 'rgba(255,255,255,0.4)';
+  for (let i = 0; i < 6; i++) {
+    ctx.fillRect(cx - bodyW / 2 + 1, bodyTop + spanH * 0.06 + i * spanH * 0.12, 2, 2);
+    ctx.fillRect(cx + bodyW / 2 - 3, bodyTop + spanH * 0.06 + i * spanH * 0.12, 2, 2);
+  }
+}
+
+export function drawCherryBlossom(ctx, px, py, spanW, spanH) {
+  const cx = px + spanW / 2;
+  const baseY = py + spanH * 0.94;
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.beginPath();
+  ctx.ellipse(cx, baseY, spanW * 0.3, spanH * 0.05, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // trunk with a fork, for a fuller mature-tree silhouette
+  ctx.fillStyle = '#5b3a1e';
+  ctx.fillRect(cx - spanW * 0.03, py + spanH * 0.5, spanW * 0.06, spanH * 0.44);
+  ctx.strokeStyle = '#5b3a1e';
+  ctx.lineWidth = Math.max(2, spanW * 0.035);
+  ctx.beginPath();
+  ctx.moveTo(cx, py + spanH * 0.52);
+  ctx.lineTo(cx - spanW * 0.14, py + spanH * 0.36);
+  ctx.moveTo(cx, py + spanH * 0.5);
+  ctx.lineTo(cx + spanW * 0.12, py + spanH * 0.34);
+  ctx.stroke();
+  // full, layered pink blossom canopy instead of green leaves
+  ctx.fillStyle = '#d9749c';
+  ctx.beginPath();
+  ctx.ellipse(cx, py + spanH * 0.3, spanW * 0.44, spanH * 0.24, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#e88fb0';
+  ctx.beginPath();
+  ctx.ellipse(cx - spanW * 0.16, py + spanH * 0.22, spanW * 0.26, spanH * 0.17, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(cx + spanW * 0.18, py + spanH * 0.24, spanW * 0.22, spanH * 0.15, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#f4b8cf';
+  ctx.beginPath();
+  ctx.ellipse(cx - spanW * 0.02, py + spanH * 0.16, spanW * 0.2, spanH * 0.12, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // small bright blossom flecks scattered through the canopy and drifting
+  // down past the base, for a "grand and detailed" flourish
+  ctx.fillStyle = '#fff0f5';
+  const flecks = [[-0.22, 0.3], [0.08, 0.14], [0.24, 0.32], [-0.04, 0.4], [0.3, 0.2], [-0.32, 0.22]];
+  for (const [dx, dy] of flecks) {
+    ctx.beginPath();
+    ctx.arc(cx + spanW * dx, py + spanH * dy, spanW * 0.018, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = 'rgba(255,240,245,0.7)';
+  for (const [dx, dy] of [[-0.3, 0.7], [0.26, 0.78], [0.05, 0.86]]) {
+    ctx.beginPath();
+    ctx.arc(cx + spanW * dx, py + spanH * dy, spanW * 0.014, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+const DECORATION_DRAWERS = {
+  acacia: drawAcacia,
+  baobab: drawBaobab,
+  cactus: drawCactus,
+  'cherry-blossom': drawCherryBlossom,
+};
+
+export function drawDecoration(ctx, px, py, size, type, w = 1, h = 1) {
+  const drawer = DECORATION_DRAWERS[type];
+  if (drawer) drawer(ctx, px, py, size * w, size * h);
+}
+
 export function drawFence(ctx, px, py, size, mask, isGate) {
   const cx = px + size / 2, cy = py + size / 2;
   ctx.strokeStyle = '#5c3d1e';

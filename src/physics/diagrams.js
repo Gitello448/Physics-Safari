@@ -62,6 +62,8 @@ export function drawDiagram(canvas, spec) {
     drawVectorComponents(ctx, w, h, spec);
   } else if (spec.type === 'vector-sum') {
     drawVectorSum(ctx, w, h, spec);
+  } else if (spec.type === 'line-graph') {
+    drawLineGraph(ctx, w, h, spec);
   }
 }
 
@@ -134,6 +136,78 @@ function drawVectorComponents(ctx, w, h, spec) {
   drawArrow(ctx, endX, cy, endX, endY, COLOR.line);
   label(ctx, `Vy = ${spec.vy}`, endX + 6, (cy + endY) / 2);
   drawArrow(ctx, cx, cy, endX, endY, COLOR.accent, 3);
+}
+
+// Generic motion-graph plotter: connects spec.points ({t, y}) with straight
+// segments on labeled axes. Used for position/velocity/acceleration-vs-time
+// questions (Ch2). Optional spec.segmentLabels draws vertical dividers with
+// a short label centered in each interval, for "which segment..." questions.
+function drawLineGraph(ctx, w, h, spec) {
+  const padL = 46, padR = 16, padT = 16, padB = 34;
+  const plotW = w - padL - padR;
+  const plotH = h - padT - padB;
+  const points = spec.points;
+  const ts = points.map((p) => p.t);
+  const ys = points.map((p) => p.y);
+  const tMin = Math.min(0, ...ts), tMax = Math.max(...ts);
+  const yMin = Math.min(0, ...ys), yMax = Math.max(...ys);
+  const tRange = tMax - tMin || 1;
+  const yRange = yMax - yMin || 1;
+  const px = (t) => padL + ((t - tMin) / tRange) * plotW;
+  const py = (y) => padT + plotH - ((y - yMin) / yRange) * plotH;
+
+  // axes
+  ctx.strokeStyle = COLOR.axis;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(padL, padT); ctx.lineTo(padL, padT + plotH); ctx.lineTo(padL + plotW, padT + plotH);
+  ctx.stroke();
+  // zero line (y=0), if within range and not the same as the axis itself
+  if (yMin < 0 && yMax > 0) {
+    ctx.strokeStyle = 'rgba(232,224,184,0.2)';
+    ctx.beginPath();
+    ctx.moveTo(padL, py(0)); ctx.lineTo(padL + plotW, py(0));
+    ctx.stroke();
+  }
+
+  label(ctx, spec.xLabel || 't', padL + plotW / 2, h - 6, { align: 'center' });
+  ctx.save();
+  ctx.translate(12, padT + plotH / 2);
+  ctx.rotate(-Math.PI / 2);
+  label(ctx, spec.yLabel || 'y', 0, 0, { align: 'center' });
+  ctx.restore();
+
+  if (spec.segmentLabels) {
+    ctx.strokeStyle = 'rgba(232,224,184,0.15)';
+    ctx.lineWidth = 1;
+    for (const seg of spec.segmentLabels) {
+      const x0 = px(seg.from);
+      if (seg.from > tMin) {
+        ctx.beginPath();
+        ctx.moveTo(x0, padT); ctx.lineTo(x0, padT + plotH);
+        ctx.stroke();
+      }
+      const xMid = (px(seg.from) + px(seg.to)) / 2;
+      label(ctx, seg.label, xMid, padT + 14, { align: 'center', color: COLOR.accent, bold: true });
+    }
+  }
+
+  // the plotted line
+  ctx.strokeStyle = COLOR.accent;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  points.forEach((p, i) => {
+    const x = px(p.t), y = py(p.y);
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+
+  ctx.fillStyle = COLOR.accent;
+  for (const p of points) {
+    ctx.beginPath();
+    ctx.arc(px(p.t), py(p.y), 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 function drawVectorSum(ctx, w, h, spec) {

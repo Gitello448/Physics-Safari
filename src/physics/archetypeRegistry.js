@@ -3,8 +3,9 @@
 // the engine needs to change when Chapter 2+ archetypes are added.
 
 import { CH1_ARCHETYPES } from './ch1archetypes.js';
+import { CH2_ARCHETYPES } from './ch2archetypes.js';
 
-const ALL_ARCHETYPES = [...CH1_ARCHETYPES];
+const ALL_ARCHETYPES = [...CH1_ARCHETYPES, ...CH2_ARCHETYPES];
 
 const BY_SKILL = new Map();
 const BY_ID = new Map();

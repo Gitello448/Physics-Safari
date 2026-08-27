@@ -146,7 +146,7 @@ for (const arch of ARCHS) {
   assert('cumulative session returns items even though only ch1 has content', cumulative.length === 5);
 
   const examSession = buildSession({ mode: 'exam', examId: 'exam1', count: 5 }, { mastery: store, rng });
-  assert('exam1 session (ch1-3) only pulls from ch1 since 2-3 have no content yet', examSession.every((q) => q.skillId.startsWith('ch1.')));
+  assert('exam1 session (ch1-3) only pulls from ch1/ch2 since ch3 has no content yet', examSession.every((q) => q.skillId.startsWith('ch1.') || q.skillId.startsWith('ch2.')));
 
   const bogus = buildSession({ mode: 'chapter', chapterId: 'ch9', count: 5 }, { mastery: store, rng });
   assert('a chapter with zero implemented skills yields an empty session (no crash)', bogus.length === 0);

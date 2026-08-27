@@ -49,7 +49,72 @@ export const EQUATIONS_BY_CHAPTER = {
       ],
     },
   ],
-  // Chapters 2+ will populate here as their archetypes are built.
+  ch2: [
+    {
+      id: 'displacement', equation: 'Δx = x_f − x₀',
+      variables: [
+        { symbol: 'Δx', meaning: 'displacement', unit: 'm' },
+        { symbol: 'x₀, x_f', meaning: 'initial and final position', unit: 'm' },
+      ],
+    },
+    {
+      id: 'avg-velocity', equation: 'v_avg = Δx / t',
+      variables: [
+        { symbol: 'v_avg', meaning: 'average velocity', unit: 'm/s' },
+        { symbol: 'Δx', meaning: 'displacement', unit: 'm' },
+        { symbol: 't', meaning: 'elapsed time', unit: 's' },
+      ],
+    },
+    {
+      id: 'avg-acceleration', equation: 'a = (v_f − v₀) / t',
+      variables: [
+        { symbol: 'a', meaning: 'average acceleration', unit: 'm/s²' },
+        { symbol: 'v₀, v_f', meaning: 'initial and final velocity', unit: 'm/s' },
+        { symbol: 't', meaning: 'elapsed time', unit: 's' },
+      ],
+    },
+    {
+      id: 'kinematic-1', equation: 'v_f = v₀ + at',
+      variables: [
+        { symbol: 'v_f', meaning: 'final velocity', unit: 'm/s' },
+        { symbol: 'v₀', meaning: 'initial velocity', unit: 'm/s' },
+        { symbol: 'a', meaning: 'constant acceleration', unit: 'm/s²' },
+        { symbol: 't', meaning: 'elapsed time', unit: 's' },
+      ],
+    },
+    {
+      id: 'kinematic-2', equation: 'Δx = v₀t + ½at²',
+      variables: [
+        { symbol: 'Δx', meaning: 'displacement', unit: 'm' },
+        { symbol: 'v₀', meaning: 'initial velocity', unit: 'm/s' },
+        { symbol: 'a', meaning: 'constant acceleration', unit: 'm/s²' },
+        { symbol: 't', meaning: 'elapsed time', unit: 's' },
+      ],
+    },
+    {
+      id: 'kinematic-3', equation: 'v_f² = v₀² + 2aΔx',
+      variables: [
+        { symbol: 'v_f, v₀', meaning: 'final and initial velocity', unit: 'm/s' },
+        { symbol: 'a', meaning: 'constant acceleration', unit: 'm/s²' },
+        { symbol: 'Δx', meaning: 'displacement', unit: 'm' },
+      ],
+    },
+    {
+      id: 'kinematic-4', equation: 'Δx = ½(v₀ + v_f)t',
+      variables: [
+        { symbol: 'Δx', meaning: 'displacement', unit: 'm' },
+        { symbol: 'v₀, v_f', meaning: 'initial and final velocity', unit: 'm/s' },
+        { symbol: 't', meaning: 'elapsed time', unit: 's' },
+      ],
+    },
+    {
+      id: 'free-fall-g', equation: 'g = 9.8 m/s² (downward), used in place of a in the kinematic equations',
+      variables: [
+        { symbol: 'g', meaning: 'acceleration due to gravity near Earth\'s surface', unit: 'm/s²' },
+      ],
+    },
+  ],
+  // Chapters 3+ will populate here as their archetypes are built.
 };
 
 export function equationsForChapter(chapterId) {

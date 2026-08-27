@@ -11,7 +11,7 @@ import { buildSession } from './physics/practice.js';
 import { mulberry32, newSeed } from './physics/rng.js';
 import { createEduUI } from './eduUI.js';
 import { ExpeditionScenery } from './expeditionScenery.js';
-import { onAuthStateChange, signUp, signIn, signOut, ensurePlayerRows, fetchCloudSave, writeCloudSave } from './auth.js';
+import { onAuthStateChange, signUp, signIn, signOut, ensurePlayerRows, fetchCloudSave, writeCloudSave, fetchUserRole } from './auth.js';
 
 const SAVE_KEY = 'safari-scholar-save-v3';
 
@@ -48,14 +48,30 @@ const mastery = new SkillMasteryStore();
 // real deduction, so the underlying credits value is never touched by it
 // and the actual economy keeps working exactly the same once disabled.
 let devMode = false;
+// Only ever true when the authenticated account's Supabase role is
+// 'developer' (see fetchUserRole / setDeveloperAccount below) — never
+// settable from a username, localStorage, or a URL param.
+let isDeveloperAccount = false;
 const devBadgeEl = document.getElementById('devBadge');
 const devToggleBtn = document.getElementById('devModeToggle');
 function setDevMode(on) {
+  if (on && !isDeveloperAccount) return; // no path to dev mode without the account role, even via window.__ss
   devMode = on;
   devBadgeEl.classList.toggle('hidden', !devMode);
   devToggleBtn.classList.toggle('active', devMode);
 }
 devToggleBtn.addEventListener('click', () => setDevMode(!devMode));
+
+// Toggles whether the Dev Mode control is even visible at all. Normal
+// players and guests never see it; only an account whose Supabase role is
+// 'developer' does. Switching away from a developer account forces dev
+// mode off so it can never linger into a different account's session.
+function setDeveloperAccount(isDev) {
+  isDeveloperAccount = isDev;
+  devToggleBtn.classList.toggle('hidden', !isDev);
+  if (!isDev) setDevMode(false);
+}
+setDeveloperAccount(false);
 
 function canAfford(cost) { return devMode || credits >= cost; }
 function spend(cost) { if (!devMode) { credits -= cost; updateCreditsUI(); } }
@@ -244,6 +260,13 @@ function showImportChoice(guestBlob, userId) {
 async function switchToCloudAccount(userId) {
   toast('Loading your saved park…');
   await ensurePlayerRows(userId);
+  try {
+    const role = await fetchUserRole(userId);
+    setDeveloperAccount(role === 'developer');
+  } catch (e) {
+    console.warn('role fetch failed, defaulting to normal player', e);
+    setDeveloperAccount(false);
+  }
   const row = await fetchCloudSave(userId);
   const hasSavedBefore = row && row.park_state && Array.isArray(row.park_state.structures);
   console.info('[cloud-save] switchToCloudAccount', {
@@ -303,6 +326,7 @@ onAuthStateChange((session) => {
       cloudUserId = newUserId;
 
       if (!newUserId) {
+        setDeveloperAccount(false); // guests are never developers
         loadLocalIntoGame();
         return;
       }

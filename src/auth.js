@@ -58,3 +58,19 @@ export async function writeCloudSave(userId, { credits, researchPoints, parkStat
     .eq('user_id', userId);
   if (error) throw error;
 }
+
+// Phase 3: developer role. There is deliberately no writeUserRole — nothing
+// in the app can ever set or change a role. RLS only grants SELECT on this
+// column to the row's own owner; the only way it's ever set is you running
+// SQL directly against Supabase. Defaults to 'player' if the row/column
+// somehow isn't there yet, so a fetch failure never accidentally grants
+// developer access.
+export async function fetchUserRole(userId) {
+  const { data, error } = await supabase
+    .from('player_profile')
+    .select('role')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data && data.role) || 'player';
+}

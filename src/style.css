@@ -126,6 +126,7 @@ html, body {
 }
 
 #devBadge.hidden { display: none; }
+#devModeToggle.hidden { display: none; }
 #devBadge {
   padding: 6px 12px;
   font-size: 11px;

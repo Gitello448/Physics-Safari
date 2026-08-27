@@ -58,6 +58,11 @@ export function render(ctx, canvas, world, camera, animals, visitors, input, t) 
     }
   }
 
+  // The entrance sign hangs above the walkway — draw it after visitors/animals
+  // so anyone passing underneath it reads as walking UNDER the sign, not on
+  // top of it.
+  drawEntranceSign(ctx, world, camera, size);
+
   drawCursor(ctx, world, camera, input, size);
 }
 
@@ -157,7 +162,30 @@ function drawEntrance(ctx, world, camera, size, t) {
   ctx.fillStyle = 'rgba(60,30,10,0.3)';
   ctx.fillRect(topLeft.x + w * 0.03, beamY + beamH * 0.75, w * 0.94, beamH * 0.25);
 
-  // hanging sign with a beveled border for depth
+  // torches on each pillar, with a flickering animated flame
+  for (const px of [pillarX0, pillarX1]) {
+    drawTorch(ctx, px + pillarW / 2, pillarTop - size * 0.05, size, t);
+  }
+
+  // low boundary rails flanking the gate
+  ctx.strokeStyle = '#5c3d1e';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(topLeft.x - size * 1.5, topLeft.y + h * 0.78);
+  ctx.lineTo(topLeft.x, topLeft.y + h * 0.78);
+  ctx.moveTo(topLeft.x + w, topLeft.y + h * 0.78);
+  ctx.lineTo(topLeft.x + w + size * 1.5, topLeft.y + h * 0.78);
+  ctx.stroke();
+}
+
+// Drawn separately from drawEntrance() and painted AFTER visitors/animals —
+// it hangs above the walkway, so anyone standing under it should be hidden
+// behind it, not drawn on top of it.
+function drawEntranceSign(ctx, world, camera, size) {
+  const ent = world.entranceTile;
+  const topLeft = camera.worldToScreen((ent.x - 3) * TILE, (ent.y - 2) * TILE);
+  const w = size * 7;
+
   const signW = w * 0.66, signH = size * 0.62;
   const signX = topLeft.x + (w - signW) / 2;
   const signY = topLeft.y - size * 0.4;
@@ -176,21 +204,6 @@ function drawEntrance(ctx, world, camera, size, t) {
   ctx.textAlign = 'center';
   ctx.fillText('SAFARI PARK ENTRANCE', topLeft.x + w / 2, signY + signH * 0.65);
   ctx.textAlign = 'left';
-
-  // torches on each pillar, with a flickering animated flame
-  for (const px of [pillarX0, pillarX1]) {
-    drawTorch(ctx, px + pillarW / 2, pillarTop - size * 0.05, size, t);
-  }
-
-  // low boundary rails flanking the gate
-  ctx.strokeStyle = '#5c3d1e';
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(topLeft.x - size * 1.5, topLeft.y + h * 0.78);
-  ctx.lineTo(topLeft.x, topLeft.y + h * 0.78);
-  ctx.moveTo(topLeft.x + w, topLeft.y + h * 0.78);
-  ctx.lineTo(topLeft.x + w + size * 1.5, topLeft.y + h * 0.78);
-  ctx.stroke();
 }
 
 function drawTorch(ctx, cx, baseY, size, t) {

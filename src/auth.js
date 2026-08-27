@@ -31,3 +31,30 @@ export async function ensurePlayerRows(userId) {
   await supabase.from('player_profile').upsert({ user_id: userId }, { onConflict: 'user_id', ignoreDuplicates: true });
   await supabase.from('player_save').upsert({ user_id: userId }, { onConflict: 'user_id', ignoreDuplicates: true });
 }
+
+// Phase 2: the actual cloud save. RLS restricts both of these to the
+// caller's own row (auth.uid() = user_id), so this never needs to trust
+// the passed-in userId for security — it's just used to target the query.
+export async function fetchCloudSave(userId) {
+  const { data, error } = await supabase
+    .from('player_save')
+    .select('credits, research_points, park_state, curriculum_state')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+export async function writeCloudSave(userId, { credits, researchPoints, parkState, curriculumState }) {
+  const { error } = await supabase
+    .from('player_save')
+    .update({
+      credits,
+      research_points: researchPoints,
+      park_state: parkState,
+      curriculum_state: curriculumState,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('user_id', userId);
+  if (error) throw error;
+}

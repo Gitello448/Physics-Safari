@@ -11,7 +11,7 @@ import { buildSession } from './physics/practice.js';
 import { mulberry32, newSeed } from './physics/rng.js';
 import { createEduUI } from './eduUI.js';
 import { ExpeditionScenery } from './expeditionScenery.js';
-import { onAuthStateChange, signUp, signIn, signOut, ensurePlayerRows } from './auth.js';
+import { onAuthStateChange, signUp, signIn, signOut, ensurePlayerRows, fetchCloudSave, writeCloudSave } from './auth.js';
 
 const SAVE_KEY = 'safari-scholar-save-v3';
 
@@ -60,7 +60,8 @@ devToggleBtn.addEventListener('click', () => setDevMode(!devMode));
 function canAfford(cost) { return devMode || credits >= cost; }
 function spend(cost) { if (!devMode) { credits -= cost; updateCreditsUI(); } }
 
-// --- Account (Phase 1: auth only — no game data synced to Supabase yet) ---
+// --- Account (Phase 2: Supabase is the authoritative save for logged-in
+// accounts; local storage remains for guest/offline play only) -----------
 const authBtn = document.getElementById('authBtn');
 const authBackdropEl = document.getElementById('authBackdrop');
 const authPanelEl = document.getElementById('authPanel');
@@ -125,17 +126,196 @@ document.getElementById('authSignOutBtn').addEventListener('click', async () => 
   try { await signOut(); } catch (e) { /* ignore */ }
 });
 
+// --- Cloud save wiring ---------------------------------------------------
+// cloudUserId is null in guest mode. Whenever it's set, persist() writes to
+// Supabase (debounced) instead of localStorage, and that account's row is
+// authoritative on every future login. Local storage is only ever read/
+// written in guest mode, so it can never be silently mixed between accounts.
+let cloudUserId = null;
+let cloudSaveTimer = null;
+const CLOUD_SAVE_DEBOUNCE_MS = 2000;
+
+function currentGameStateBlob() {
+  return {
+    credits,
+    researchPoints,
+    structures: world.exportStructures(),
+    animals: animals.map((a) => ({ species: a.species, x: a.tileX, y: a.tileY })),
+    mastery: mastery.toJSON(),
+  };
+}
+
+function applyGameStateBlob(data) {
+  credits = typeof data.credits === 'number' ? data.credits : 5000;
+  researchPoints = typeof data.researchPoints === 'number' ? data.researchPoints : 0;
+  world.clearStructures();
+  if (Array.isArray(data.structures)) world.loadStructures(data.structures);
+  animals = Array.isArray(data.animals) ? data.animals.map(({ species, x, y }) => new Animal(species, x, y)) : [];
+  mastery.bySkill = new SkillMasteryStore(data.mastery && typeof data.mastery === 'object' ? data.mastery : {}).bySkill;
+  updateCreditsUI();
+  updateResearchUI();
+}
+
+function readLocalBlob() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+
+function guestHasMeaningfulProgress(blob) {
+  if (!blob) return false;
+  if (typeof blob.credits === 'number' && blob.credits !== 5000) return true;
+  if (typeof blob.researchPoints === 'number' && blob.researchPoints > 0) return true;
+  if (Array.isArray(blob.structures) && blob.structures.length > 0) return true;
+  if (Array.isArray(blob.animals) && blob.animals.length > 0) return true;
+  if (blob.mastery && typeof blob.mastery === 'object' && Object.keys(blob.mastery).length > 0) return true;
+  return false;
+}
+
+function loadLocalIntoGame() {
+  applyGameStateBlob(readLocalBlob() || {});
+}
+
+async function flushCloudSave(userId) {
+  if (!userId) return;
+  const blob = currentGameStateBlob();
+  try {
+    await writeCloudSave(userId, {
+      credits: blob.credits,
+      researchPoints: blob.researchPoints,
+      parkState: { structures: blob.structures, animals: blob.animals },
+      curriculumState: { mastery: blob.mastery },
+    });
+  } catch (e) {
+    console.warn('cloud save failed', e);
+  }
+}
+
+// Set while an account switch is actively loading/deciding (network round
+// trips + a possible Import/Start Fresh prompt). persist() is a no-op during
+// this window so nothing — e.g. a passive-revenue tick — can schedule a
+// write of the OLD in-memory state under the NEW account's id before that
+// account's own data has actually been applied.
+let switchingAccount = false;
+
+function scheduleCloudSave() {
+  if (switchingAccount) return;
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer = setTimeout(() => flushCloudSave(cloudUserId), CLOUD_SAVE_DEBOUNCE_MS);
+}
+
+const cloudSyncBackdropEl = document.getElementById('cloudSyncBackdrop');
+const cloudSyncPanelEl = document.getElementById('cloudSyncPanel');
+const cloudSyncBodyEl = document.getElementById('cloudSyncBody');
+
+function showImportChoice(guestBlob, userId) {
+  const guestCredits = typeof guestBlob.credits === 'number' ? guestBlob.credits : 5000;
+  const structCount = Array.isArray(guestBlob.structures) ? guestBlob.structures.length : 0;
+  const animalCount = Array.isArray(guestBlob.animals) ? guestBlob.animals.length : 0;
+  cloudSyncBodyEl.textContent = `This account doesn't have a saved park yet, but this browser has an existing guest park (🪙${guestCredits.toLocaleString()}, ${structCount} built tiles, ${animalCount} animals). Import it into this account, or start fresh?`;
+  cloudSyncBackdropEl.classList.remove('hidden');
+  cloudSyncPanelEl.classList.remove('hidden');
+
+  function cleanup() {
+    cloudSyncBackdropEl.classList.add('hidden');
+    cloudSyncPanelEl.classList.add('hidden');
+    importBtn.removeEventListener('click', onImport);
+    freshBtn.removeEventListener('click', onFresh);
+  }
+  const importBtn = document.getElementById('cloudSyncImportBtn');
+  const freshBtn = document.getElementById('cloudSyncFreshBtn');
+  async function onImport() {
+    cleanup();
+    applyGameStateBlob(guestBlob);
+    await flushCloudSave(userId);
+    try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ }
+    toast('Imported your guest park into this account.');
+  }
+  async function onFresh() {
+    cleanup();
+    await flushCloudSave(userId);
+    toast('Started a fresh park for this account.');
+  }
+  importBtn.addEventListener('click', onImport);
+  freshBtn.addEventListener('click', onFresh);
+}
+
+async function switchToCloudAccount(userId) {
+  toast('Loading your saved park…');
+  await ensurePlayerRows(userId);
+  const row = await fetchCloudSave(userId);
+  const hasSavedBefore = row && row.park_state && Array.isArray(row.park_state.structures);
+  console.info('[cloud-save] switchToCloudAccount', {
+    userId, hasSavedBefore,
+    row: row && { credits: row.credits, researchPoints: row.research_points, structCount: row.park_state && row.park_state.structures && row.park_state.structures.length, animalCount: row.park_state && row.park_state.animals && row.park_state.animals.length },
+  });
+
+  if (hasSavedBefore) {
+    applyGameStateBlob({
+      credits: row.credits,
+      researchPoints: row.research_points,
+      structures: row.park_state.structures,
+      animals: row.park_state.animals,
+      mastery: (row.curriculum_state && row.curriculum_state.mastery) || {},
+    });
+    toast('Loaded your saved park.');
+    return;
+  }
+
+  // Brand-new account: never auto-copy guest progress. Reset to a clean
+  // slate first so nothing from a previous account lingers on screen, then
+  // decide what to do with whatever's sitting in the local guest slot.
+  const guestBlob = readLocalBlob();
+  applyGameStateBlob({});
+  if (guestHasMeaningfulProgress(guestBlob)) {
+    console.info('[cloud-save] offering guest import', { userId, guestBlob });
+    showImportChoice(guestBlob, userId);
+  } else {
+    console.info('[cloud-save] starting fresh, no meaningful guest progress', { userId });
+    await flushCloudSave(userId);
+  }
+}
+
 onAuthStateChange((session) => {
   authBtn.classList.toggle('active', !!session);
   if (session) {
     authLoggedOutEl.classList.add('hidden');
     authLoggedInEl.classList.remove('hidden');
     authEmailDisplayEl.textContent = session.user.email;
-    ensurePlayerRows(session.user.id).catch((e) => console.warn('ensurePlayerRows failed', e));
   } else {
     authLoggedOutEl.classList.remove('hidden');
     authLoggedInEl.classList.add('hidden');
   }
+
+  const newUserId = session ? session.user.id : null;
+  console.info('[cloud-save] auth state change', { newUserId, cloudUserId, switchingAccount });
+  if (newUserId === cloudUserId) return; // token refresh etc. — nothing actually changed
+
+  (async () => {
+    switchingAccount = true;
+    try {
+      const previousUserId = cloudUserId;
+      if (previousUserId) {
+        clearTimeout(cloudSaveTimer);
+        await flushCloudSave(previousUserId);
+      }
+      cloudUserId = newUserId;
+
+      if (!newUserId) {
+        loadLocalIntoGame();
+        return;
+      }
+      try {
+        await switchToCloudAccount(newUserId);
+      } catch (e) {
+        console.warn('cloud save load failed', e);
+        toast('Could not load your saved park — check your connection and try again.');
+      }
+    } finally {
+      switchingAccount = false;
+    }
+  })();
 });
 
 const creditsEl = document.getElementById('creditsValue');
@@ -313,37 +493,33 @@ const input = attachInput(canvas, camera, {
 });
 input.state.isPlacementValid = isPlacementValid;
 
+// Guest mode writes straight to localStorage; logged-in mode debounces a
+// write to that account's Supabase row instead (see cloud save wiring above).
 function persist() {
-  const data = {
-    credits,
-    researchPoints,
-    structures: world.exportStructures(),
-    animals: animals.map((a) => ({ species: a.species, x: a.tileX, y: a.tileY })),
-    mastery: mastery.toJSON(),
-  };
+  if (cloudUserId) {
+    scheduleCloudSave();
+    return;
+  }
+  const data = currentGameStateBlob();
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (e) { /* storage unavailable */ }
 }
 
-function load() {
-  let raw;
-  try { raw = localStorage.getItem(SAVE_KEY); } catch (e) { return; }
-  if (!raw) return;
-  try {
-    const data = JSON.parse(raw);
-    credits = typeof data.credits === 'number' ? data.credits : credits;
-    researchPoints = typeof data.researchPoints === 'number' ? data.researchPoints : researchPoints;
-    if (Array.isArray(data.structures)) world.loadStructures(data.structures);
-    if (Array.isArray(data.animals)) {
-      animals = data.animals.map(({ species, x, y }) => new Animal(species, x, y));
-    }
-    if (data.mastery && typeof data.mastery === 'object') {
-      mastery.bySkill = new SkillMasteryStore(data.mastery).bySkill;
-    }
-    updateCreditsUI();
-    updateResearchUI();
-  } catch (e) { console.warn('save data corrupt, ignoring', e); }
-}
-load();
+// Guest state loads immediately at boot so there's no blank-park flash while
+// auth resolves asynchronously; onAuthStateChange (above) then overrides this
+// with the account's cloud save if the player turns out to already be logged in.
+loadLocalIntoGame();
+
+// Make sure the last few seconds of play aren't lost if the tab is closed
+// or backgrounded right after an edit, since cloud saves are debounced.
+window.addEventListener('beforeunload', () => {
+  if (cloudUserId) { clearTimeout(cloudSaveTimer); flushCloudSave(cloudUserId); }
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' && cloudUserId) {
+    clearTimeout(cloudSaveTimer);
+    flushCloudSave(cloudUserId);
+  }
+});
 
 // --- Visitors: population target tracks how developed the park is ------
 let populationCheckAccum = 0;

@@ -241,6 +241,26 @@ html, body {
 #authLoggedIn.hidden { display: none; }
 .auth-message.success { color: #7CFC00; }
 
+#cloudSyncBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 21;
+  background: rgba(0,0,0,0.45);
+}
+#cloudSyncBackdrop.hidden { display: none; }
+
+#cloudSyncPanel {
+  position: fixed;
+  top: 38%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 22;
+  padding: 20px 26px;
+  width: 360px;
+  text-align: center;
+}
+#cloudSyncPanel.hidden { display: none; }
+
 .auth-email-display {
   font-size: 13px;
   color: #9fc9ff;

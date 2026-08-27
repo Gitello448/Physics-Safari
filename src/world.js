@@ -336,6 +336,14 @@ export class World {
     this.recomputeNetworks();
   }
 
+  // Wipes all player-built structures (paths/fences/gates), e.g. when
+  // switching to a different account's save. Natural scenery is untouched —
+  // it's the same deterministic map for every account, not part of any save.
+  clearStructures() {
+    this.structures = this.emptyGrid(null);
+    this.recomputeNetworks();
+  }
+
   habitatAt(x, y) {
     if (!this.inBounds(x, y)) return null;
     const id = this.habitatId[y][x];

@@ -78,7 +78,7 @@
 
     <div id="authLoggedIn" class="hidden">
       <div id="authEmailDisplay" class="auth-email-display"></div>
-      <div class="hq-prompt-body">You're signed in. (Your park still only saves locally for now — cloud save comes next.)</div>
+      <div class="hq-prompt-body">You're signed in. Your park and curriculum progress are saved to this account.</div>
       <div class="hq-prompt-actions">
         <button id="authSignOutBtn" class="big-btn">LOG OUT</button>
       </div>
@@ -86,6 +86,16 @@
 
     <div class="hq-prompt-actions" style="margin-top:8px;">
       <button id="authCancelBtn" class="small-btn">Close</button>
+    </div>
+  </div>
+
+  <div id="cloudSyncBackdrop" class="hidden"></div>
+  <div id="cloudSyncPanel" class="pixel-panel hidden">
+    <div class="hq-prompt-title">IMPORT YOUR GUEST PARK?</div>
+    <div class="hq-prompt-body" id="cloudSyncBody">This account doesn't have a saved park yet, but this browser has an existing guest park.</div>
+    <div class="hq-prompt-actions">
+      <button id="cloudSyncImportBtn" class="big-btn">Import Guest Park</button>
+      <button id="cloudSyncFreshBtn" class="small-btn">Start Fresh</button>
     </div>
   </div>
 

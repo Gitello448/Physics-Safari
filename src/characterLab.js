@@ -27,7 +27,7 @@ export const CHARACTER_TEMPLATES = {
   building: { label: 'Building / Attraction', desc: 'provisional sizing · static', frame: { w: 192, h: 224 }, frames: STATIC_FRAMES },
 };
 
-export function createCharacterLab({ root, getUserId }) {
+export function createCharacterLab({ root, getUserId, getIsDeveloper }) {
   let prototypes = [];
   let editing = null; // { id, name, template, frames: {key: {w,h,pixels}} }
   let frameIndex = 0;
@@ -41,6 +41,11 @@ export function createCharacterLab({ root, getUserId }) {
   }
 
   async function open() {
+    // Refuses to open for anyone but the developer role, independent of
+    // whether the caller remembered to check first (e.g. a hidden toolbar
+    // button revealed via devtools) — nothing here ever depends solely on
+    // UI visibility, matching how Dev Mode itself is gated.
+    if (!getIsDeveloper || !getIsDeveloper()) return;
     root.classList.remove('hidden');
     document.getElementById('charLabBackdrop').classList.remove('hidden');
     await showList();

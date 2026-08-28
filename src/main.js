@@ -159,6 +159,7 @@ const CLOUD_SAVE_DEBOUNCE_MS = 2000;
 const characterLab = createCharacterLab({
   root: document.getElementById('characterLab'),
   getUserId: () => cloudUserId,
+  getIsDeveloper: () => isDeveloperAccount,
 });
 charLabBtn.addEventListener('click', () => characterLab.open());
 document.getElementById('charLabBackdrop').addEventListener('click', () => characterLab.close());

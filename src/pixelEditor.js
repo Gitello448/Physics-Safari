@@ -22,6 +22,30 @@ function rgbToHex(r, g, b) {
   return '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('');
 }
 
+function hexToRgb(hex) {
+  return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+}
+
+// Inverse of hsvToRgb — used by the eyedropper to reconstruct a hue/
+// saturation/value the color wheel and shade slider can display, from a
+// plain hex color already sitting on the canvas.
+function rgbToHsv(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const d = max - min;
+  let h = 0;
+  if (d !== 0) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  const s = max === 0 ? 0 : d / max;
+  const v = max;
+  return [h, s, v];
+}
+
 // Creates a pixel editor inside `container`. `w`/`h` are the true pixel grid
 // dimensions (e.g. 64x96). `initialPixels` is a flat array (length w*h) of
 // hex strings or null (transparent); omit for a blank frame. `onionPixels`
@@ -43,7 +67,7 @@ export function createPixelEditor(container, { w, h, initialPixels, onionPixels,
 
   let hue = 120, sat = 0.6, val = 0.6; // shade slider drives `val` (light<->dark)
   let currentColor = rgbToHex(...hsvToRgb(hue, sat, val));
-  let tool = 'paint'; // paint | erase
+  let tool = 'paint'; // paint | erase | eyedropper
   let brushSize = initialBrushSize || 1;
 
   function drawGrid() {
@@ -98,8 +122,28 @@ export function createPixelEditor(container, { w, h, initialPixels, onionPixels,
     drawGrid();
   }
 
+  // Eyedropper: click a painted cell to match the pencil to it, then hop
+  // back to Paint so the very next click continues drawing with that color.
+  function pickColorAt(clientX, clientY) {
+    const rect = gridCanvas.getBoundingClientRect();
+    const x = Math.floor((clientX - rect.left) / (rect.width / w));
+    const y = Math.floor((clientY - rect.top) / (rect.height / h));
+    if (x < 0 || y < 0 || x >= w || y >= h) return;
+    const hex = pixels[y * w + x];
+    if (!hex) return; // nothing painted there to match
+    const [r, g, b] = hexToRgb(hex);
+    [hue, sat, val] = rgbToHsv(r, g, b);
+    shadeInput.value = String(Math.round(val * 100));
+    updateColor();
+    setTool('paint');
+  }
+
   let painting = false;
-  const onDown = (e) => { painting = true; paintAt(e.clientX, e.clientY); };
+  const onDown = (e) => {
+    if (tool === 'eyedropper') { pickColorAt(e.clientX, e.clientY); return; }
+    painting = true;
+    paintAt(e.clientX, e.clientY);
+  };
   const onMove = (e) => { if (painting) paintAt(e.clientX, e.clientY); };
   const onUp = () => { painting = false; };
   gridCanvas.addEventListener('mousedown', onDown);
@@ -187,12 +231,21 @@ export function createPixelEditor(container, { w, h, initialPixels, onionPixels,
   paintBtn.type = 'button'; paintBtn.className = 'pe-tool-btn active'; paintBtn.textContent = '🖌 Paint';
   const eraseBtn = document.createElement('button');
   eraseBtn.type = 'button'; eraseBtn.className = 'pe-tool-btn'; eraseBtn.textContent = '🧹 Erase';
+  const eyedropperBtn = document.createElement('button');
+  eyedropperBtn.type = 'button'; eyedropperBtn.className = 'pe-tool-btn'; eyedropperBtn.textContent = '💧 Match Color';
   const clearBtn = document.createElement('button');
   clearBtn.type = 'button'; clearBtn.className = 'pe-tool-btn'; clearBtn.textContent = '🗑 Clear frame';
-  paintBtn.addEventListener('click', () => { tool = 'paint'; paintBtn.classList.add('active'); eraseBtn.classList.remove('active'); });
-  eraseBtn.addEventListener('click', () => { tool = 'erase'; eraseBtn.classList.add('active'); paintBtn.classList.remove('active'); });
+  const toolButtons = { paint: paintBtn, erase: eraseBtn, eyedropper: eyedropperBtn };
+  function setTool(name) {
+    tool = name;
+    for (const [key, btn] of Object.entries(toolButtons)) btn.classList.toggle('active', key === name);
+    gridCanvas.style.cursor = name === 'eyedropper' ? 'copy' : 'crosshair';
+  }
+  paintBtn.addEventListener('click', () => setTool('paint'));
+  eraseBtn.addEventListener('click', () => setTool('erase'));
+  eyedropperBtn.addEventListener('click', () => setTool('eyedropper'));
   clearBtn.addEventListener('click', () => { pixels.fill(null); drawGrid(); });
-  toolsRow.appendChild(paintBtn); toolsRow.appendChild(eraseBtn); toolsRow.appendChild(clearBtn);
+  toolsRow.appendChild(paintBtn); toolsRow.appendChild(eraseBtn); toolsRow.appendChild(eyedropperBtn); toolsRow.appendChild(clearBtn);
 
   // ---- brush size ----
   const brushRow = document.createElement('div');

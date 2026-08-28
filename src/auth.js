@@ -74,3 +74,35 @@ export async function fetchUserRole(userId) {
   if (error) throw error;
   return (data && data.role) || 'player';
 }
+
+// Phase 4: Character Lab prototypes. RLS on character_prototypes only lets
+// a 'developer'-role account insert/update/delete rows at all, so this
+// never needs its own client-side role check to be safe — a non-developer
+// account's writes are rejected by the database regardless of what the UI
+// does or doesn't show.
+export async function fetchPrototypes(userId) {
+  const { data, error } = await supabase
+    .from('character_prototypes')
+    .select('id, name, template, frames, status, created_at, updated_at')
+    .eq('user_id', userId)
+    .order('updated_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function savePrototype(userId, { id, name, template, frames, status }) {
+  const row = { user_id: userId, name, template, frames, status: status || 'draft', updated_at: new Date().toISOString() };
+  if (id) row.id = id;
+  const { data, error } = await supabase
+    .from('character_prototypes')
+    .upsert(row, { onConflict: 'id' })
+    .select('id, name, template, frames, status, created_at, updated_at')
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deletePrototype(id) {
+  const { error } = await supabase.from('character_prototypes').delete().eq('id', id);
+  if (error) throw error;
+}

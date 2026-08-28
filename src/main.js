@@ -13,6 +13,7 @@ import { mulberry32, newSeed } from './physics/rng.js';
 import { createEduUI } from './eduUI.js';
 import { ExpeditionScenery } from './expeditionScenery.js';
 import { onAuthStateChange, signUp, signIn, signOut, ensurePlayerRows, fetchCloudSave, writeCloudSave, fetchUserRole } from './auth.js';
+import { createCharacterLab } from './characterLab.js';
 
 const SAVE_KEY = 'safari-scholar-save-v3';
 
@@ -55,6 +56,7 @@ let devMode = false;
 let isDeveloperAccount = false;
 const devBadgeEl = document.getElementById('devBadge');
 const devToggleBtn = document.getElementById('devModeToggle');
+const charLabBtn = document.getElementById('charLabBtn');
 function setDevMode(on) {
   if (on && !isDeveloperAccount) return; // no path to dev mode without the account role, even via window.__ss
   devMode = on;
@@ -70,6 +72,7 @@ devToggleBtn.addEventListener('click', () => setDevMode(!devMode));
 function setDeveloperAccount(isDev) {
   isDeveloperAccount = isDev;
   devToggleBtn.classList.toggle('hidden', !isDev);
+  charLabBtn.classList.toggle('hidden', !isDev);
   if (!isDev) setDevMode(false);
 }
 setDeveloperAccount(false);
@@ -151,6 +154,13 @@ document.getElementById('authSignOutBtn').addEventListener('click', async () => 
 let cloudUserId = null;
 let cloudSaveTimer = null;
 const CLOUD_SAVE_DEBOUNCE_MS = 2000;
+
+const characterLab = createCharacterLab({
+  root: document.getElementById('characterLab'),
+  getUserId: () => cloudUserId,
+});
+charLabBtn.addEventListener('click', () => characterLab.open());
+document.getElementById('charLabBackdrop').addEventListener('click', () => characterLab.close());
 
 function currentGameStateBlob() {
   return {

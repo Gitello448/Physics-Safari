@@ -24,10 +24,14 @@ function rgbToHex(r, g, b) {
 
 // Creates a pixel editor inside `container`. `w`/`h` are the true pixel grid
 // dimensions (e.g. 64x96). `initialPixels` is a flat array (length w*h) of
-// hex strings or null (transparent); omit for a blank frame.
+// hex strings or null (transparent); omit for a blank frame. `onionPixels`
+// (optional, same shape) renders as a faint reference layer behind the
+// editable pixels — typically the previous frame, so new frames line up.
 // Returns { getPixels(), setPixels(arr), destroy() }.
-export function createPixelEditor(container, { w, h, initialPixels } = {}) {
+export function createPixelEditor(container, { w, h, initialPixels, onionPixels, initialBrushSize } = {}) {
   const pixels = (initialPixels && initialPixels.length === w * h) ? initialPixels.slice() : new Array(w * h).fill(null);
+  const onion = (onionPixels && onionPixels.length === w * h) ? onionPixels : null;
+  let onionOn = !!onion;
 
   const MAX_GRID_PX = 380;
   const zoom = Math.max(3, Math.min(9, Math.floor(MAX_GRID_PX / Math.max(w, h))));
@@ -40,20 +44,28 @@ export function createPixelEditor(container, { w, h, initialPixels } = {}) {
   let hue = 120, sat = 0.6, val = 0.6; // shade slider drives `val` (light<->dark)
   let currentColor = rgbToHex(...hsvToRgb(hue, sat, val));
   let tool = 'paint'; // paint | erase
+  let brushSize = initialBrushSize || 1;
 
   function drawGrid() {
     gctx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
-    // checkerboard so transparency is visible
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const i = y * w + x;
         const px = pixels[i];
         if (px) {
           gctx.fillStyle = px;
+          gctx.fillRect(x * zoom, y * zoom, zoom, zoom);
         } else {
           gctx.fillStyle = ((x + y) % 2 === 0) ? '#3a3f30' : '#32362a';
+          gctx.fillRect(x * zoom, y * zoom, zoom, zoom);
+          const onionPx = onionOn && onion && onion[i];
+          if (onionPx) {
+            gctx.globalAlpha = 0.4;
+            gctx.fillStyle = onionPx;
+            gctx.fillRect(x * zoom, y * zoom, zoom, zoom);
+            gctx.globalAlpha = 1;
+          }
         }
-        gctx.fillRect(x * zoom, y * zoom, zoom, zoom);
       }
     }
     gctx.strokeStyle = 'rgba(0,0,0,0.15)';
@@ -73,11 +85,16 @@ export function createPixelEditor(container, { w, h, initialPixels } = {}) {
 
   function paintAt(clientX, clientY) {
     const rect = gridCanvas.getBoundingClientRect();
-    const x = Math.floor((clientX - rect.left) / (rect.width / w));
-    const y = Math.floor((clientY - rect.top) / (rect.height / h));
-    if (x < 0 || y < 0 || x >= w || y >= h) return;
-    const i = y * w + x;
-    pixels[i] = tool === 'erase' ? null : currentColor;
+    const cx = Math.floor((clientX - rect.left) / (rect.width / w));
+    const cy = Math.floor((clientY - rect.top) / (rect.height / h));
+    const half = Math.floor((brushSize - 1) / 2);
+    for (let dy = 0; dy < brushSize; dy++) {
+      for (let dx = 0; dx < brushSize; dx++) {
+        const x = cx - half + dx, y = cy - half + dy;
+        if (x < 0 || y < 0 || x >= w || y >= h) continue;
+        pixels[y * w + x] = tool === 'erase' ? null : currentColor;
+      }
+    }
     drawGrid();
   }
 
@@ -177,6 +194,39 @@ export function createPixelEditor(container, { w, h, initialPixels } = {}) {
   clearBtn.addEventListener('click', () => { pixels.fill(null); drawGrid(); });
   toolsRow.appendChild(paintBtn); toolsRow.appendChild(eraseBtn); toolsRow.appendChild(clearBtn);
 
+  // ---- brush size ----
+  const brushRow = document.createElement('div');
+  brushRow.className = 'pe-brush-row';
+  const brushLabelEl = document.createElement('span');
+  brushLabelEl.className = 'pe-brush-label';
+  brushLabelEl.textContent = `Brush: ${brushSize}px`;
+  const brushInput = document.createElement('input');
+  brushInput.type = 'range';
+  brushInput.min = '1';
+  brushInput.max = '6';
+  brushInput.value = String(brushSize);
+  brushInput.className = 'pe-brush';
+  brushInput.addEventListener('input', () => {
+    brushSize = Number(brushInput.value);
+    brushLabelEl.textContent = `Brush: ${brushSize}px`;
+  });
+  brushRow.appendChild(brushLabelEl);
+  brushRow.appendChild(brushInput);
+
+  // ---- onion skin toggle (only shown when a reference frame is available) ----
+  let onionToggle = null;
+  if (onion) {
+    const onionRow = document.createElement('label');
+    onionRow.className = 'pe-onion-row';
+    onionToggle = document.createElement('input');
+    onionToggle.type = 'checkbox';
+    onionToggle.checked = true;
+    onionToggle.addEventListener('change', () => { onionOn = onionToggle.checked; drawGrid(); });
+    onionRow.appendChild(onionToggle);
+    onionRow.appendChild(document.createTextNode(' Onion skin (previous frame)'));
+    brushRow.appendChild(onionRow);
+  }
+
   const colorRow = document.createElement('div');
   colorRow.className = 'pe-color-row';
   colorRow.appendChild(wheelCanvas);
@@ -197,6 +247,7 @@ export function createPixelEditor(container, { w, h, initialPixels } = {}) {
   gridWrap.appendChild(gridCanvas);
   container.appendChild(gridWrap);
   container.appendChild(toolsRow);
+  container.appendChild(brushRow);
   container.appendChild(colorRow);
 
   drawGrid();
@@ -204,6 +255,7 @@ export function createPixelEditor(container, { w, h, initialPixels } = {}) {
 
   return {
     getPixels: () => pixels.slice(),
+    getBrushSize: () => brushSize,
     setPixels: (arr) => {
       if (arr && arr.length === w * h) {
         for (let i = 0; i < arr.length; i++) pixels[i] = arr[i];

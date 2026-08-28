@@ -32,6 +32,7 @@ export function createCharacterLab({ root, getUserId }) {
   let editing = null; // { id, name, template, frames: {key: {w,h,pixels}} }
   let frameIndex = 0;
   let pixelEditor = null;
+  let lastBrushSize = 1; // carried across frame navigation so it doesn't reset every frame
   let previewTimer = null;
 
   function render(html) {
@@ -179,6 +180,7 @@ export function createCharacterLab({ root, getUserId }) {
       <div id="clEditorHost"></div>
       <div class="cl-actions">
         ${frameIndex > 0 ? '<button class="small-btn" id="clCopyPrev">Copy previous frame</button>' : ''}
+        ${!isStatic ? '<button class="small-btn" id="clCopyFirstToAll">Copy frame 1 → all frames</button>' : ''}
         <button class="big-btn" id="clSaveBtn">Save Draft</button>
         <button class="small-btn" id="clDoneBtn">Done — Back to List</button>
       </div>
@@ -186,7 +188,9 @@ export function createCharacterLab({ root, getUserId }) {
 
     const host = document.getElementById('clEditorHost');
     const existing = editing.frames[key];
-    pixelEditor = createPixelEditor(host, { w: tpl.frame.w, h: tpl.frame.h, initialPixels: existing?.pixels });
+    const onionKey = frameIndex > 0 ? frames[frameIndex - 1] : null;
+    const onionPixels = onionKey ? editing.frames[onionKey]?.pixels : null;
+    pixelEditor = createPixelEditor(host, { w: tpl.frame.w, h: tpl.frame.h, initialPixels: existing?.pixels, onionPixels, initialBrushSize: lastBrushSize });
 
     if (!isStatic) {
       document.getElementById('clPrevFrame')?.addEventListener('click', () => { commitCurrentFrame(); frameIndex--; showFrameEditor(); });
@@ -197,6 +201,16 @@ export function createCharacterLab({ root, getUserId }) {
       const prev = editing.frames[prevKey];
       if (prev) pixelEditor.setPixels(prev.pixels);
     });
+    document.getElementById('clCopyFirstToAll')?.addEventListener('click', () => {
+      commitCurrentFrame();
+      const first = editing.frames[frames[0]];
+      if (!first) { window.alert('Draw frame 1 first — then this can copy it into the rest.'); return; }
+      if (!window.confirm(`Copy frame 1's design into all other frames? This overwrites whatever is currently on frames 2–${frames.length}.`)) return;
+      for (let idx = 1; idx < frames.length; idx++) {
+        editing.frames[frames[idx]] = { w: first.w, h: first.h, pixels: first.pixels.slice() };
+      }
+      showFrameEditor();
+    });
     document.getElementById('clSaveBtn').addEventListener('click', saveDraft);
     document.getElementById('clDoneBtn').addEventListener('click', async () => { commitCurrentFrame(); await saveDraft(); showList(); });
   }
@@ -206,6 +220,7 @@ export function createCharacterLab({ root, getUserId }) {
     const tpl = CHARACTER_TEMPLATES[editing.template];
     const key = tpl.frames[frameIndex];
     editing.frames[key] = { w: tpl.frame.w, h: tpl.frame.h, pixels: pixelEditor.getPixels() };
+    lastBrushSize = pixelEditor.getBrushSize();
   }
 
   async function saveDraft() {

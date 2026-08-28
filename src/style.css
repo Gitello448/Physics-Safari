@@ -830,6 +830,11 @@ select.numeric-input {
 .pe-tool-btn:hover { background: #2c3524; }
 .pe-tool-btn.active { background: #7a9a4a; color: #12160b; border-color: #ffe066; }
 
+.pe-brush-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11px; color: #cddca8; }
+.pe-brush-label { white-space: nowrap; min-width: 62px; }
+.pe-brush { width: 100px; }
+.pe-onion-row { display: flex; align-items: center; gap: 6px; cursor: pointer; margin-left: 8px; }
+
 .pe-color-row { display: flex; gap: 16px; align-items: flex-start; }
 .pe-wheel { cursor: crosshair; border-radius: 50%; }
 .pe-shade-col { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 120px; }

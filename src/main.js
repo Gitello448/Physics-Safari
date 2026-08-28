@@ -813,6 +813,24 @@ document.getElementById('researchGoBtn').addEventListener('click', () => {
 });
 scheduleNextResearchEvent();
 
+// Console-only, deliberately not a UI button: clears every built/bought
+// thing (paths, fences, decorations, animals) and restores starting
+// credits on whichever account is currently active (cloud save if
+// logged in, local guest save otherwise). Physics/curriculum progress is
+// untouched. Run window.__ss.resetMyPark() from the browser console.
+function resetMyPark() {
+  if (!window.confirm('Reset your park? This removes every animal, path, fence, and decoration, and restores your starting credits. Your physics progress is NOT affected. This cannot be undone.')) return;
+  world.clearStructures();
+  world.clearDecorations();
+  animals = [];
+  credits = 5000;
+  researchPoints = 0;
+  updateCreditsUI();
+  updateResearchUI();
+  persist();
+  toast('Your park has been reset.');
+}
+
 window.__ss = {
   world, camera, Animal, ANIMAL_DEFS, mastery, Visitor, pickDestination,
   computeAttractionScore, targetVisitorCount, buildSession,
@@ -823,7 +841,7 @@ window.__ss = {
   get credits() { return credits; },
   set credits(v) { credits = v; },
   get researchPoints() { return researchPoints; },
-  setDevMode, expeditionScenery, eduUI,
+  setDevMode, expeditionScenery, eduUI, resetMyPark,
 };
 
 let lastT = performance.now();

@@ -130,6 +130,24 @@ html, body {
 
 #devBadge.hidden { display: none; }
 #devModeToggle.hidden { display: none; }
+
+#sellPanel {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 12;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: #cddca8;
+  white-space: nowrap;
+}
+#sellPanel.hidden { display: none; }
+#sellPanel .small-btn, #sellPanel .big-btn { padding: 6px 12px; font-size: 12px; }
+.sell-total { color: #ffe066; font-size: 14px; font-weight: bold; }
 #devBadge {
   padding: 6px 12px;
   font-size: 11px;
@@ -803,6 +821,21 @@ select.numeric-input {
   margin-bottom: 10px;
 }
 .cl-preview-hint { font-size: 11px; color: #8fa363; text-align: center; margin-bottom: 8px; }
+
+.cl-export-text {
+  width: 100%;
+  height: 160px;
+  background: #1a1f14;
+  border: 1px solid #3d4f26;
+  border-radius: 3px;
+  color: #cddca8;
+  font-family: monospace;
+  font-size: 10px;
+  padding: 8px;
+  resize: vertical;
+  box-sizing: border-box;
+  margin-bottom: 10px;
+}
 
 /* ---- Pixel editor widget ---- */
 .pixel-editor { display: flex; flex-direction: column; align-items: center; gap: 14px; }

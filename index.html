@@ -19,7 +19,7 @@
   <div id="toolbar" class="pixel-panel">
     <div class="tool-group">
       <button class="tool-btn" data-tool="pan" title="Pan / Select">✋</button>
-      <button class="tool-btn" data-tool="delete" title="Remove">🗑️</button>
+      <button class="tool-btn" data-tool="delete" title="Sell — select items, then confirm to sell them for 75% of their price">🗑️</button>
     </div>
     <div class="tool-group">
       <button class="tool-btn" data-category="building" title="Building Supplies">🏗️</button>
@@ -40,6 +40,13 @@
   </div>
 
   <div id="hint" class="pixel-panel">Right-drag or arrow keys to pan · Scroll to zoom</div>
+
+  <div id="sellPanel" class="pixel-panel hidden">
+    <span id="sellCount">Click items to select them for selling</span>
+    <span id="sellTotal" class="sell-total">🪙0</span>
+    <button id="sellClearBtn" class="small-btn">Clear</button>
+    <button id="sellBtn" class="big-btn" disabled>Sell</button>
+  </div>
 
   <div id="shopBackdrop" class="hidden"></div>
   <div id="shopPanel" class="pixel-panel hidden">

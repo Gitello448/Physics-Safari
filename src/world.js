@@ -12,7 +12,6 @@ export const SCENERY = {
 export const STRUCTURE = {
   PATH: 'path',
   FENCE: 'fence',
-  GATE: 'gate',
 };
 
 function seededRandom(seed) {
@@ -42,7 +41,7 @@ export class World {
     this.structures = this.emptyGrid(null);
     // Purchased decorations (acacia/baobab/cactus/cherry-blossom, etc.) —
     // deliberately kept separate from `scenery` (naturally-generated, requires
-    // the Clear tool) and from `structures` (paths/fences/gates, which drive
+    // the Clear tool) and from `structures` (paths/fences, which drive
     // path-network/enclosure connectivity). A decoration just occupies and
     // blocks its tile, like blocking scenery does.
     this.decorations = this.emptyGrid(null);
@@ -173,7 +172,7 @@ export class World {
       for (let x = 0; x < this.w; x++) {
         const st = this.structures[y][x];
         if (!st) continue;
-        const kinds = st.kind === STRUCTURE.PATH ? [STRUCTURE.PATH, STRUCTURE.GATE] : [STRUCTURE.FENCE, STRUCTURE.GATE];
+        const kinds = st.kind === STRUCTURE.PATH ? [STRUCTURE.PATH] : [STRUCTURE.FENCE];
         const n = this.sameKindNeighbor(x, y, kinds);
         st.mask = (n.N ? 1 : 0) | (n.E ? 2 : 0) | (n.S ? 4 : 0) | (n.W ? 8 : 0);
       }
@@ -183,7 +182,7 @@ export class World {
   isPathTile(x, y) {
     if (!this.inBounds(x, y)) return false;
     const st = this.structures[y][x];
-    return !!(st && (st.kind === STRUCTURE.PATH || st.kind === STRUCTURE.GATE));
+    return !!(st && st.kind === STRUCTURE.PATH);
   }
 
   pathNeighborsOf(x, y) {
@@ -217,7 +216,7 @@ export class World {
     this.spawnTile = best;
   }
 
-  // BFS shortest route between two path/gate tiles, walking only the path network.
+  // BFS shortest route between two path tiles, walking only the path network.
   findPathRoute(fromX, fromY, toX, toY) {
     if (!this.isPathTile(fromX, fromY) || !this.isPathTile(toX, toY)) return null;
     if (fromX === toX && fromY === toY) return [{ x: fromX, y: fromY }];
@@ -267,7 +266,6 @@ export class World {
         const queue = [[x, y]];
         visited[y][x] = true;
         let touchesBorder = false;
-        let touchesGate = false;
 
         while (queue.length) {
           const [cx, cy] = queue.pop();
@@ -277,11 +275,6 @@ export class World {
           const neighbors = [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]];
           for (const [nx, ny] of neighbors) {
             if (!this.inBounds(nx, ny) || visited[ny][nx]) continue;
-            const st = this.structures[ny][nx];
-            if (st && st.kind === STRUCTURE.GATE) {
-              // an open gate lets the region leak outside; treat as a border touch
-              touchesGate = true;
-            }
             if (!this.isWalkable(nx, ny)) { visited[ny][nx] = true; continue; }
             visited[ny][nx] = true;
             queue.push([nx, ny]);
@@ -289,7 +282,7 @@ export class World {
         }
 
         const MAX_HABITAT_SIZE = 1800;
-        const enclosed = !touchesBorder && !touchesGate && tiles.length > 0 && tiles.length < MAX_HABITAT_SIZE;
+        const enclosed = !touchesBorder && tiles.length > 0 && tiles.length < MAX_HABITAT_SIZE;
         if (tiles.length <= 1) continue; // ignore tiny slivers (e.g. single walkable tiles amid fence-only noise)
 
         const id = this._nextHabitatId++;
@@ -339,14 +332,18 @@ export class World {
 
   loadStructures(list) {
     for (const { x, y, kind } of list) {
-      if (this.inBounds(x, y)) this.structures[y][x] = { kind };
+      // Gates were removed (they broke enclosure detection — see
+      // recomputeHabitats). Any gate from an older save becomes a fence, so
+      // an existing enclosure keeps its wall intact instead of gaining a hole.
+      const safeKind = kind === 'gate' ? STRUCTURE.FENCE : kind;
+      if (this.inBounds(x, y)) this.structures[y][x] = { kind: safeKind };
     }
     this.recomputeNetworks();
   }
 
-  // Wipes all player-built structures (paths/fences/gates), e.g. when
-  // switching to a different account's save. Natural scenery is untouched —
-  // it's the same deterministic map for every account, not part of any save.
+  // Wipes all player-built structures (paths/fences), e.g. when switching to
+  // a different account's save. Natural scenery is untouched — it's the
+  // same deterministic map for every account, not part of any save.
   clearStructures() {
     this.structures = this.emptyGrid(null);
     this.recomputeNetworks();

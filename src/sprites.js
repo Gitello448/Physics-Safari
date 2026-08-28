@@ -1,3 +1,5 @@
+import { frameToCanvas, findFloorRow } from './pixelEditor.js';
+
 // Small deterministic hash -> [0,1) for per-tile organic variance without storing extra state.
 export function hash2(x, y) {
   let h = (x * 374761393 + y * 668265263) ^ (x << 13);
@@ -306,7 +308,7 @@ export function drawDecoration(ctx, px, py, size, type, w = 1, h = 1) {
   if (drawer) drawer(ctx, px, py, size * w, size * h);
 }
 
-export function drawFence(ctx, px, py, size, mask, isGate) {
+export function drawFence(ctx, px, py, size, mask) {
   const cx = px + size / 2, cy = py + size / 2;
   ctx.strokeStyle = '#5c3d1e';
   ctx.lineWidth = Math.max(2, size * 0.09);
@@ -318,9 +320,6 @@ export function drawFence(ctx, px, py, size, mask, isGate) {
     [4, 0, half, 0],  // S
     [8, -half, 0, 0], // W
   ];
-  if (isGate) {
-    ctx.strokeStyle = '#8a5a2a';
-  }
   for (const [bit, ox, oy] of dirs) {
     if (mask & bit) {
       ctx.beginPath();
@@ -330,7 +329,7 @@ export function drawFence(ctx, px, py, size, mask, isGate) {
     }
   }
   // post
-  ctx.fillStyle = isGate ? '#c99a4a' : '#7a5230';
+  ctx.fillStyle = '#7a5230';
   const postSize = size * 0.16;
   ctx.fillRect(cx - postSize / 2, cy - postSize / 2, postSize, postSize);
   if (mask === 0) {
@@ -385,7 +384,64 @@ const ANIMAL_COLORS = {
   rhino: { body: '#8f9a8a', accent: '#5f6a5a' },
 };
 
-export function drawAnimal(ctx, px, py, size, species, facing, animT) {
+// Cache of built {canvas, floorRow} per species+frame-key, for hand-drawn
+// (Character Lab-published) animals — built once on first use, since the
+// underlying pixel data never changes at runtime.
+const spriteFrameCache = new Map();
+function getSpriteFrame(species, frameKey, frame) {
+  const cacheKey = `${species}:${frameKey}`;
+  let entry = spriteFrameCache.get(cacheKey);
+  if (!entry) {
+    entry = { canvas: frameToCanvas(frame), floorRow: findFloorRow(frame) };
+    spriteFrameCache.set(cacheKey, entry);
+  }
+  return entry;
+}
+
+const IDLE_FRAME_MS = 600;
+const WALK_FRAME_MS = 150;
+
+// Hand-drawn animal (published from Character Lab): picks an idle/walk
+// frame from animT, then grounds the artist's actual bottommost painted
+// pixel (not the raw canvas edge) at the bottom of the (px,py,size) box, so
+// a drawing that doesn't reach the bottom row still stands on the tile
+// instead of floating above it.
+function drawSpriteAnimal(ctx, px, py, size, species, facing, animT, frames, state) {
+  const walkKeys = ['walk_1', 'walk_2', 'walk_3', 'walk_4'].filter((k) => frames[k]);
+  const idleKeys = ['idle_1', 'idle_2'].filter((k) => frames[k]);
+  let frameKey;
+  if (state === 'walking' && walkKeys.length > 0) {
+    frameKey = walkKeys[Math.floor(animT / WALK_FRAME_MS) % walkKeys.length];
+  } else if (idleKeys.length > 0) {
+    frameKey = idleKeys[Math.floor(animT / IDLE_FRAME_MS) % idleKeys.length];
+  } else {
+    frameKey = walkKeys[0] || Object.keys(frames)[0];
+  }
+  const frame = frames[frameKey];
+  if (!frame) return;
+  const { canvas, floorRow } = getSpriteFrame(species, frameKey, frame);
+
+  const scale = size / frame.w;
+  const dw = size, dh = frame.h * scale;
+  const floorFrac = (floorRow + 1) / frame.h;
+  const dx = px, dy = (py + size) - dh * floorFrac;
+
+  ctx.save();
+  if (facing < 0) {
+    ctx.translate(dx + dw, dy);
+    ctx.scale(-1, 1);
+    ctx.drawImage(canvas, 0, 0, dw, dh);
+  } else {
+    ctx.drawImage(canvas, dx, dy, dw, dh);
+  }
+  ctx.restore();
+}
+
+export function drawAnimal(ctx, px, py, size, species, facing, animT, spriteFrames, state) {
+  if (spriteFrames) {
+    drawSpriteAnimal(ctx, px, py, size, species, facing, animT, spriteFrames, state);
+    return;
+  }
   const colors = ANIMAL_COLORS[species] || ANIMAL_COLORS.zebra;
   const bob = Math.sin(animT / 220) * size * 0.03;
   const cx = px + size / 2;

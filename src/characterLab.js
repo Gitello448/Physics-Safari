@@ -5,7 +5,7 @@
 // RLS-locked to the developer role) — nothing here is visible to any other
 // player, and nothing "publishes" itself; that stays a manual step later.
 
-import { createPixelEditor, frameToCanvas } from './pixelEditor.js';
+import { createPixelEditor, frameToCanvas, findFloorRow, encodeFrameCompact } from './pixelEditor.js';
 import { fetchPrototypes, savePrototype, deletePrototype } from './auth.js';
 
 const ANIMATED_FRAMES = ['idle_1', 'idle_2', 'walk_1', 'walk_2', 'walk_3', 'walk_4'];
@@ -90,6 +90,7 @@ export function createCharacterLab({ root, getUserId }) {
             <div class="cl-row-actions">
               <button class="small-btn" data-edit="${p.id}">Edit</button>
               <button class="small-btn" data-preview="${p.id}">Preview</button>
+              <button class="small-btn" data-export="${p.id}">Export</button>
               <button class="small-btn" data-delete="${p.id}">Delete</button>
             </div>
           </div>`).join('')}
@@ -103,7 +104,46 @@ export function createCharacterLab({ root, getUserId }) {
     document.getElementById('clCloseBtn').addEventListener('click', close);
     root.querySelectorAll('[data-edit]').forEach((b) => b.addEventListener('click', () => editPrototype(b.dataset.edit)));
     root.querySelectorAll('[data-preview]').forEach((b) => b.addEventListener('click', () => previewPrototype(b.dataset.preview)));
+    root.querySelectorAll('[data-export]').forEach((b) => b.addEventListener('click', () => showExport(b.dataset.export)));
     root.querySelectorAll('[data-delete]').forEach((b) => b.addEventListener('click', () => removePrototype(b.dataset.delete)));
+  }
+
+  // Gets the pixel data out of the browser as pasteable text, so it can be
+  // handed over in chat and baked into the real game as published content
+  // — there's no other way to get a developer-only, RLS-locked prototype's
+  // data out safely (nothing should ever fetch it on the player's behalf).
+  function showExport(id) {
+    const p = prototypes.find((x) => x.id === id);
+    if (!p) return;
+    const compactFrames = {};
+    for (const [key, frame] of Object.entries(p.frames || {})) {
+      if (frame && frame.pixels) compactFrames[key] = encodeFrameCompact(frame);
+    }
+    const payload = JSON.stringify({ name: p.name, template: p.template, frames: compactFrames });
+    render(`
+      <div class="cl-header">🎨 EXPORT — ${escapeHtml(p.name)}<span class="cl-sub">paste this to Claude in chat to publish it</span></div>
+      <textarea id="clExportText" class="cl-export-text" readonly></textarea>
+      <div class="cl-actions">
+        <button class="small-btn" id="clCopyExport">Copy to Clipboard</button>
+        <button class="small-btn" id="clBackBtn">← Back</button>
+      </div>
+    `);
+    const textarea = document.getElementById('clExportText');
+    textarea.value = payload;
+    textarea.focus();
+    textarea.select();
+    document.getElementById('clCopyExport').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(payload);
+        const btn = document.getElementById('clCopyExport');
+        btn.textContent = 'Copied ✓';
+        setTimeout(() => { if (btn) btn.textContent = 'Copy to Clipboard'; }, 1200);
+      } catch (e) {
+        textarea.select();
+        window.alert('Could not copy automatically — the text is already selected, so Cmd/Ctrl+C should work.');
+      }
+    });
+    document.getElementById('clBackBtn').addEventListener('click', showList);
   }
 
   function editPrototype(id) {
@@ -263,14 +303,20 @@ export function createCharacterLab({ root, getUserId }) {
     const framesData = frameKeys.map((k) => p.frames[k]).filter(Boolean);
     if (framesData.length === 0) return;
     const canvases = framesData.map((f) => frameToCanvas(f));
+    // Ground the artist's actual bottommost painted pixel, not the raw
+    // canvas edge — a drawing that doesn't reach the bottom row would
+    // otherwise look like it's floating above the ground line.
+    const floorRows = framesData.map((f) => findFloorRow(f));
 
     let i = 0, mirror = false, loops = 0;
     function drawFrame() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const img = canvases[i % canvases.length];
+      const idx = i % canvases.length;
+      const img = canvases[idx];
       const scale = Math.min(200 / img.width, 200 / img.height);
       const dw = img.width * scale, dh = img.height * scale;
-      const dx = (canvas.width - dw) / 2, dy = canvas.height - dh - 20;
+      const floorY = (floorRows[idx] + 1) * scale;
+      const dx = (canvas.width - dw) / 2, dy = canvas.height - 20 - floorY;
       ctx.save();
       if (mirror) { ctx.translate(dx + dw, dy); ctx.scale(-1, 1); ctx.drawImage(img, 0, 0, dw, dh); }
       else { ctx.drawImage(img, dx, dy, dw, dh); }

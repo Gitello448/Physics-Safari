@@ -1,5 +1,6 @@
 import { TILE, STRUCTURE } from './world.js';
 import { drawGrassTile, drawTree, drawRock, drawBush, drawWater, drawPath, drawFence, drawAnimal, drawVisitor, drawDecoration } from './sprites.js';
+import { ANIMAL_DEFS } from './animals.js';
 
 export function render(ctx, canvas, world, camera, animals, visitors, input, t) {
   ctx.imageSmoothingEnabled = false;
@@ -18,7 +19,7 @@ export function render(ctx, canvas, world, camera, animals, visitors, input, t) 
       const st = world.structures[y][x];
       if (st) {
         if (st.kind === STRUCTURE.PATH) drawPath(ctx, s.x, s.y, size, st.mask);
-        else drawFence(ctx, s.x, s.y, size, st.mask, st.kind === STRUCTURE.GATE);
+        else drawFence(ctx, s.x, s.y, size, st.mask);
       }
 
       const habitat = world.habitatAt(x, y);
@@ -60,7 +61,8 @@ export function render(ctx, canvas, world, camera, animals, visitors, input, t) 
 
   for (const a of animals) {
     const s = camera.worldToScreen(a.x * TILE, a.y * TILE);
-    drawAnimal(ctx, s.x - size / 2, s.y - size / 2, size, a.species, a.facing, a.animT);
+    const def = ANIMAL_DEFS[a.species];
+    drawAnimal(ctx, s.x - size / 2, s.y - size / 2, size, a.species, a.facing, a.animT, def && def.frames, a.state);
     if (a.state === 'stuck') {
       ctx.font = `${Math.max(10, size * 0.4)}px sans-serif`;
       ctx.fillText('⚠️', s.x - size * 0.15, s.y - size * 0.4);
@@ -72,7 +74,28 @@ export function render(ctx, canvas, world, camera, animals, visitors, input, t) 
   // top of it.
   drawEntranceSign(ctx, world, camera, size);
 
+  drawRemovalSelection(ctx, world, camera, input, size);
   drawCursor(ctx, world, camera, input, size);
+}
+
+// Highlights every tile currently selected for sale (Remove tool), drawn on
+// top of everything so a selected item is unambiguous even under animals.
+function drawRemovalSelection(ctx, world, camera, input, size) {
+  const selection = input.getRemovalSelection ? input.getRemovalSelection() : null;
+  if (!selection || selection.size === 0) return;
+  for (const item of selection.values()) {
+    let w = 1, h = 1;
+    if (item.target === 'decoration') {
+      const dec = world.decorations[item.y] && world.decorations[item.y][item.x];
+      if (dec) { w = dec.w; h = dec.h; }
+    }
+    const s = camera.worldToScreen(item.x * TILE, item.y * TILE);
+    ctx.fillStyle = 'rgba(217,79,79,0.28)';
+    ctx.fillRect(s.x, s.y, size * w, size * h);
+    ctx.strokeStyle = '#d94f4f';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(s.x + 1, s.y + 1, size * w - 2, size * h - 2);
+  }
 }
 
 function drawHQ(ctx, world, camera, size) {

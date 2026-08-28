@@ -5,7 +5,7 @@ import { render } from './render.js';
 import { Animal, ANIMAL_DEFS } from './animals.js';
 import { DECORATION_DEFS } from './decorations.js';
 import { Visitor, pickDestination, computeAttractionScore, targetVisitorCount } from './visitors.js';
-import { BUILD_COSTS, PASSIVE_REVENUE, VISITORS } from './economy.js';
+import { BUILD_COSTS, PASSIVE_REVENUE, VISITORS, SELL_RATE } from './economy.js';
 import { SkillMasteryStore } from './physics/mastery.js';
 import { RESEARCH_EVENT, computeReward } from './physics/rewards.js';
 import { buildSession } from './physics/practice.js';
@@ -398,6 +398,60 @@ function awardResearch(amount) {
 
 let currentTool = 'pan';
 
+// --- Sell/remove selection ------------------------------------------------
+// Delete tool now selects (highlights) items instead of removing them
+// instantly; a running total is shown and the player confirms with Sell.
+// Keyed by "x,y" (the anchor tile for multi-tile decorations), each entry
+// is { x, y, target: 'animal'|'structure'|'decoration', sellValue }.
+let removalSelection = new Map();
+const sellPanelEl = document.getElementById('sellPanel');
+const sellCountEl = document.getElementById('sellCount');
+const sellTotalEl = document.getElementById('sellTotal');
+const sellBtn = document.getElementById('sellBtn');
+const sellClearBtn = document.getElementById('sellClearBtn');
+
+function updateRemovalUI() {
+  const isDeleteTool = currentTool === 'delete';
+  sellPanelEl.classList.toggle('hidden', !isDeleteTool);
+  if (!isDeleteTool) return;
+  const count = removalSelection.size;
+  let total = 0;
+  for (const item of removalSelection.values()) total += item.sellValue;
+  sellCountEl.textContent = count === 0 ? 'Click items to select them for selling' : `${count} item${count === 1 ? '' : 's'} selected`;
+  sellTotalEl.textContent = `🪙${total}`;
+  sellBtn.disabled = count === 0;
+}
+
+function clearRemovalSelection() {
+  removalSelection.clear();
+  updateRemovalUI();
+}
+
+function sellSelection() {
+  let total = 0;
+  for (const item of removalSelection.values()) {
+    total += item.sellValue;
+    if (item.target === 'animal') {
+      const a = animalAt(item.x, item.y);
+      if (a) animals = animals.filter((an) => an !== a);
+    } else if (item.target === 'structure') {
+      world.removeStructure(item.x, item.y);
+    } else if (item.target === 'decoration') {
+      world.removeDecoration(item.x, item.y);
+    }
+  }
+  const count = removalSelection.size;
+  removalSelection.clear();
+  if (total > 0) {
+    toast(`Sold ${count} item${count === 1 ? '' : 's'} for 🪙${total}.`);
+    awardCredits(total);
+  }
+  updateRemovalUI();
+  persist();
+}
+sellBtn.addEventListener('click', sellSelection);
+sellClearBtn.addEventListener('click', clearRemovalSelection);
+
 // --- Shop menu: categorized flyout, replacing one long flat toolbar row ---
 // Pan/Remove are always-visible utility tools; everything purchasable lives
 // behind one of these category buttons and is rendered as name+price cards.
@@ -407,7 +461,6 @@ const SHOP_CATEGORIES = {
     items: [
       { tool: 'path', icon: '🛤️', name: 'Dirt Path', price: BUILD_COSTS.path },
       { tool: 'fence', icon: '🚧', name: 'Wood Fence', price: BUILD_COSTS.fence },
-      { tool: 'gate', icon: '🚪', name: 'Gate', price: BUILD_COSTS.gate },
     ],
   },
   animals: {
@@ -475,7 +528,10 @@ function openShopPanel(catKey) {
 }
 
 function setCurrentTool(tool) {
+  const leavingDelete = currentTool === 'delete' && tool !== 'delete';
   currentTool = tool;
+  if (leavingDelete) removalSelection.clear();
+  updateRemovalUI();
   updateToolbarActiveStates();
   closeShopPanel();
 }
@@ -492,8 +548,9 @@ shopBackdropEl.addEventListener('click', closeShopPanel);
 updateToolbarActiveStates();
 
 function isPlacementValid(x, y) {
-  if (currentTool === 'pan' || currentTool === 'delete') return true;
-  if (currentTool === 'path' || currentTool === 'fence' || currentTool === 'gate') {
+  if (currentTool === 'pan') return true;
+  if (currentTool === 'delete') return !!(animalAt(x, y) || world.structures[y][x] || world.decorations[y][x]);
+  if (currentTool === 'path' || currentTool === 'fence') {
     return world.isBuildable(x, y) && !world.structures[y][x];
   }
   if (currentTool.startsWith('animal:')) {
@@ -566,25 +623,42 @@ function onAction(x, y) {
   if (currentTool === 'pan') return;
 
   if (currentTool === 'delete') {
+    const key = `${x},${y}`;
+    if (removalSelection.has(key)) {
+      removalSelection.delete(key);
+      updateRemovalUI();
+      return;
+    }
+
     const a = animalAt(x, y);
     if (a) {
-      animals = animals.filter((an) => an !== a);
-      toast(`Removed ${ANIMAL_DEFS[a.species].name}.`);
-      persist();
+      const price = ANIMAL_DEFS[a.species].cost;
+      removalSelection.set(key, { x, y, target: 'animal', sellValue: Math.round(price * SELL_RATE) });
+      updateRemovalUI();
       return;
     }
-    if (world.removeStructure(x, y)) {
-      persist();
+
+    const dec = world.decorations[y][x];
+    if (dec) {
+      const anchorKey = `${dec.anchorX},${dec.anchorY}`;
+      if (removalSelection.has(anchorKey)) { removalSelection.delete(anchorKey); updateRemovalUI(); return; }
+      const price = DECORATION_DEFS[dec.type].cost;
+      removalSelection.set(anchorKey, { x: dec.anchorX, y: dec.anchorY, target: 'decoration', sellValue: Math.round(price * SELL_RATE) });
+      updateRemovalUI();
       return;
     }
-    if (world.removeDecoration(x, y)) {
-      persist();
+
+    const st = world.structures[y][x];
+    if (st) {
+      const price = BUILD_COSTS[st.kind];
+      removalSelection.set(key, { x, y, target: 'structure', sellValue: Math.round(price * SELL_RATE) });
+      updateRemovalUI();
     }
     return;
   }
 
-  if (currentTool === 'path' || currentTool === 'fence' || currentTool === 'gate') {
-    const kind = { path: STRUCTURE.PATH, fence: STRUCTURE.FENCE, gate: STRUCTURE.GATE }[currentTool];
+  if (currentTool === 'path' || currentTool === 'fence') {
+    const kind = { path: STRUCTURE.PATH, fence: STRUCTURE.FENCE }[currentTool];
     const cost = BUILD_COSTS[currentTool];
     if (!world.isBuildable(x, y) || world.structures[y][x]) return;
     if (!canAfford(cost)) { toast(`Not enough credits — need 🪙${cost}.`); return; }
@@ -633,6 +707,7 @@ const input = attachInput(canvas, camera, {
 });
 input.state.isPlacementValid = isPlacementValid;
 input.state.getFootprint = () => footprintForTool(currentTool);
+input.state.getRemovalSelection = () => (currentTool === 'delete' ? removalSelection : null);
 
 // Guest mode writes straight to localStorage; logged-in mode debounces a
 // write to that account's Supabase row instead (see cloud save wiring above).

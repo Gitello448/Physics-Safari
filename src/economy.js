@@ -1,7 +1,11 @@
 // Centralized, rebalance-friendly economy numbers. Nothing here should be
 // duplicated as a magic number elsewhere — import from this file instead.
 
-export const BUILD_COSTS = { path: 10, fence: 15, gate: 25 };
+export const BUILD_COSTS = { path: 10, fence: 15 };
+
+// Selling (via the Remove tool) refunds this fraction of an item's original
+// purchase price. Applies to structures, animals, and decorations alike.
+export const SELL_RATE = 0.75;
 
 export const QUESTION_REWARDS = {
   easy: 100,

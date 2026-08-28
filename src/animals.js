@@ -1,9 +1,11 @@
 import { TILE } from './world.js';
+import { PUBLISHED_ANIMALS } from './publishedCharacters.js';
 
 export const ANIMAL_DEFS = {
   zebra: { name: 'Zebra', cost: 500, speed: 1.4, icon: '🦓' },
   giraffe: { name: 'Giraffe', cost: 800, speed: 1.1, icon: '🦒' },
   rhino: { name: 'Rhino', cost: 1200, speed: 0.9, icon: '🦏' },
+  ...PUBLISHED_ANIMALS,
 };
 
 let nextId = 1;

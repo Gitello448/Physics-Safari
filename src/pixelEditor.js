@@ -271,6 +271,48 @@ export function createPixelEditor(container, { w, h, initialPixels, onionPixels,
   };
 }
 
+// The row (0-based from the top) of the lowest painted pixel in a frame —
+// the artist's actual "floor", which may sit above the canvas's bottom edge
+// if they didn't draw all the way down. Anything that positions this frame
+// in the world should ground THIS row, not the raw canvas bottom, so a
+// small/short drawing doesn't appear to float above the tile it's standing
+// on. Falls back to the last row for a fully empty frame (nothing to ground).
+export function findFloorRow(frame) {
+  for (let y = frame.h - 1; y >= 0; y--) {
+    const rowStart = y * frame.w;
+    for (let x = 0; x < frame.w; x++) {
+      if (frame.pixels[rowStart + x]) return y;
+    }
+  }
+  return frame.h - 1;
+}
+
+// Compact export encoding: a palette (up to 36 colors, indexed 0-9a-z) plus
+// a single w*h-length string ('.' = transparent). This is only for getting
+// a prototype's pixel data out of the browser as pasteable chat text — the
+// verbose {w,h,pixels:[hex|null,...]} shape used everywhere else at runtime
+// is much larger as JSON (a null/hex string per cell) than real pixel art
+// needs, since most frames use only a handful of distinct colors.
+const PALETTE_CHARS = '0123456789abcdefghijklmnopqrstuvwxyz';
+
+export function encodeFrameCompact(frame) {
+  const paletteMap = new Map();
+  const palette = [];
+  let data = '';
+  for (const hex of frame.pixels) {
+    if (!hex) { data += '.'; continue; }
+    let idx = paletteMap.get(hex);
+    if (idx === undefined) {
+      if (palette.length >= PALETTE_CHARS.length) { data += '.'; continue; } // >36 colors: drop silently, extremely unlikely for pixel art
+      idx = palette.length;
+      palette.push(hex);
+      paletteMap.set(hex, idx);
+    }
+    data += PALETTE_CHARS[idx];
+  }
+  return { w: frame.w, h: frame.h, palette, data };
+}
+
 // Builds an offscreen canvas from a stored {w,h,pixels} frame, for use as a
 // drawImage source (previewing/animating a prototype).
 export function frameToCanvas(frame) {

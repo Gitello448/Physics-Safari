@@ -7,7 +7,8 @@ import { DECORATION_DEFS } from './decorations.js';
 import { Visitor, pickDestination, computeAttractionScore, targetVisitorCount } from './visitors.js';
 import { BUILD_COSTS, PASSIVE_REVENUE, VISITORS, SELL_RATE } from './economy.js';
 import { SkillMasteryStore } from './physics/mastery.js';
-import { RESEARCH_EVENT, computeReward } from './physics/rewards.js';
+import { RESEARCH_EVENT, computeReward, LEVEL_TEST } from './physics/rewards.js';
+import { getChapter } from './physics/curriculum.js';
 import { buildSession } from './physics/practice.js';
 import { mulberry32, newSeed } from './physics/rng.js';
 import { createEduUI } from './eduUI.js';
@@ -452,6 +453,25 @@ function sellSelection() {
 sellBtn.addEventListener('click', sellSelection);
 sellClearBtn.addEventListener('click', clearRemovalSelection);
 
+// A chapter is "complete" the same way eduUI treats it: every one of its
+// skills has been passed (>=4 stars) at least once. Used to gate animals
+// that unlock on curriculum progress rather than just credits.
+function isChapterComplete(chapterId) {
+  const ch = getChapter(chapterId);
+  if (!ch) return false;
+  return ch.skills.every((s) => mastery.bestStars(s.id) >= LEVEL_TEST.passingStars);
+}
+
+function isAnimalUnlocked(def) {
+  if (!def.unlock || !def.unlock.chapter) return true;
+  return isChapterComplete(def.unlock.chapter);
+}
+
+function unlockLabel(def) {
+  const ch = getChapter(def.unlock.chapter);
+  return `🔒 Complete ${ch ? ch.title : def.unlock.chapter}`;
+}
+
 // --- Shop menu: categorized flyout, replacing one long flat toolbar row ---
 // Pan/Remove are always-visible utility tools; everything purchasable lives
 // behind one of these category buttons and is rendered as name+price cards.
@@ -465,7 +485,7 @@ const SHOP_CATEGORIES = {
   },
   animals: {
     title: 'Animals',
-    items: Object.entries(ANIMAL_DEFS).map(([key, def]) => ({ tool: `animal:${key}`, icon: def.icon, name: def.name, price: def.cost })),
+    items: Object.entries(ANIMAL_DEFS).map(([key, def]) => ({ tool: `animal:${key}`, icon: def.icon, name: def.name, price: def.cost, def })),
   },
   decor: {
     title: 'Decor',
@@ -516,10 +536,18 @@ function openShopPanel(catKey) {
     shopGridEl.appendChild(empty);
   } else {
     for (const item of cat.items) {
+      const locked = item.def && !isAnimalUnlocked(item.def);
       const btn = document.createElement('button');
-      btn.className = 'shop-item';
-      btn.innerHTML = `<span class="shop-item-icon">${item.icon}</span><span class="shop-item-name">${item.name}</span><span class="shop-item-price">🪙${item.price}</span>`;
-      btn.addEventListener('click', () => setCurrentTool(item.tool));
+      btn.className = locked ? 'shop-item shop-item-locked' : 'shop-item';
+      const priceHtml = locked
+        ? `<span class="shop-item-lock">${unlockLabel(item.def)}</span>`
+        : `<span class="shop-item-price">🪙${item.price}</span>`;
+      btn.innerHTML = `<span class="shop-item-icon">${item.icon}</span><span class="shop-item-name">${item.name}</span>${priceHtml}`;
+      if (locked) {
+        btn.addEventListener('click', () => toast(unlockLabel(item.def).replace('🔒 ', '') + ' to unlock this animal.'));
+      } else {
+        btn.addEventListener('click', () => setCurrentTool(item.tool));
+      }
       shopGridEl.appendChild(btn);
     }
   }
@@ -554,6 +582,9 @@ function isPlacementValid(x, y) {
     return world.isBuildable(x, y) && !world.structures[y][x];
   }
   if (currentTool.startsWith('animal:')) {
+    const species = currentTool.split(':')[1];
+    const def = ANIMAL_DEFS[species];
+    if (!def || !isAnimalUnlocked(def)) return false;
     const habitat = world.habitatAt(x, y);
     return !!(habitat && habitat.enclosed && !animalAt(x, y));
   }
@@ -672,6 +703,8 @@ function onAction(x, y) {
   if (currentTool.startsWith('animal:')) {
     const species = currentTool.split(':')[1];
     const def = ANIMAL_DEFS[species];
+    if (!def) return;
+    if (!isAnimalUnlocked(def)) { toast(unlockLabel(def).replace('🔒 ', '') + ' to unlock this animal.'); return; }
     const habitat = world.habitatAt(x, y);
     if (!habitat || !habitat.enclosed) {
       toast('THIS HABITAT IS NOT FULLY ENCLOSED');

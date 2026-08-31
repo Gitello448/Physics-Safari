@@ -346,12 +346,17 @@ export function drawFence(ctx, px, py, size, mask) {
 
 const VISITOR_SHIRTS = ['#d94f4f', '#4f7fd9', '#4fbf6b', '#d9a13f', '#8a4fd9', '#d94f9c'];
 
+// A hand-drawn visitor is a person, not a big animal — the procedurally-
+// drawn crowd occupies roughly a third of a tile's width, so a published
+// visitor sprite is scaled down to match that instead of filling the tile.
+const VISITOR_BOX_SCALE = 0.4;
+
 export function drawVisitor(ctx, px, py, size, facing, animT, colorIndex, variantKey, spriteFrames, state) {
   if (spriteFrames) {
     // variantKey (e.g. "chud") is the sprite cache key — distinct from any
     // published animal's key, and from any other rare visitor variant, so
     // frames never collide in getSpriteFrame's cache.
-    drawSpriteAnimal(ctx, px, py, size, `visitor:${variantKey}`, facing, animT, spriteFrames, state);
+    drawSpriteAnimal(ctx, px, py, size, `visitor:${variantKey}`, facing, animT, spriteFrames, state, VISITOR_BOX_SCALE);
     return;
   }
   const bob = Math.abs(Math.sin(animT / 180)) * size * 0.05;
@@ -412,8 +417,12 @@ const WALK_FRAME_MS = 150;
 // frame from animT, then grounds the artist's actual bottommost painted
 // pixel (not the raw canvas edge) at the bottom of the (px,py,size) box, so
 // a drawing that doesn't reach the bottom row still stands on the tile
-// instead of floating above it.
-function drawSpriteAnimal(ctx, px, py, size, species, facing, animT, frames, state) {
+// instead of floating above it. `boxScale` shrinks the drawn width relative
+// to the full tile box (and is re-centered horizontally) — animals default
+// to 1 (fill the tile), while visitors pass a smaller value so a hand-drawn
+// person reads at the same human scale as the procedurally-drawn crowd
+// instead of filling a whole tile like a big animal.
+function drawSpriteAnimal(ctx, px, py, size, species, facing, animT, frames, state, boxScale = 1) {
   const walkKeys = ['walk_1', 'walk_2', 'walk_3', 'walk_4'].filter((k) => frames[k]);
   const idleKeys = ['idle_1', 'idle_2'].filter((k) => frames[k]);
   let frameKey;
@@ -428,10 +437,11 @@ function drawSpriteAnimal(ctx, px, py, size, species, facing, animT, frames, sta
   if (!frame) return;
   const { canvas, floorRow } = getSpriteFrame(species, frameKey, frame);
 
-  const scale = size / frame.w;
-  const dw = size, dh = frame.h * scale;
+  const boxWidth = size * boxScale;
+  const scale = boxWidth / frame.w;
+  const dw = boxWidth, dh = frame.h * scale;
   const floorFrac = (floorRow + 1) / frame.h;
-  const dx = px, dy = (py + size) - dh * floorFrac;
+  const dx = px + (size - dw) / 2, dy = (py + size) - dh * floorFrac;
 
   ctx.save();
   if (facing < 0) {

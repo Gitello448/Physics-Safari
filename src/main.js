@@ -15,6 +15,7 @@ import { createEduUI } from './eduUI.js';
 import { ExpeditionScenery } from './expeditionScenery.js';
 import { onAuthStateChange, signUp, signIn, signOut, ensurePlayerRows, fetchCloudSave, writeCloudSave, fetchUserRole } from './auth.js';
 import { createCharacterLab } from './characterLab.js';
+import { createLeaderboard } from './leaderboard.js';
 
 const SAVE_KEY = 'safari-scholar-save-v3';
 
@@ -164,6 +165,15 @@ const characterLab = createCharacterLab({
 charLabBtn.addEventListener('click', () => characterLab.open());
 document.getElementById('charLabBackdrop').addEventListener('click', () => characterLab.close());
 
+// Visible to everyone, including guests — unlike Character Lab, this is a
+// normal-player-facing feature, not developer-only.
+const leaderboard = createLeaderboard({
+  root: document.getElementById('leaderboard'),
+  getUserId: () => cloudUserId,
+});
+document.getElementById('leaderboardBtn').addEventListener('click', () => leaderboard.open());
+document.getElementById('leaderboardBackdrop').addEventListener('click', () => leaderboard.close());
+
 function currentGameStateBlob() {
   return {
     credits,
@@ -270,9 +280,9 @@ function showImportChoice(guestBlob, userId) {
   freshBtn.addEventListener('click', onFresh);
 }
 
-async function switchToCloudAccount(userId) {
+async function switchToCloudAccount(userId, email) {
   toast('Loading your saved park…');
-  await ensurePlayerRows(userId);
+  await ensurePlayerRows(userId, email);
   try {
     const role = await fetchUserRole(userId);
     setDeveloperAccount(role === 'developer');
@@ -344,7 +354,7 @@ onAuthStateChange((session) => {
         return;
       }
       try {
-        await switchToCloudAccount(newUserId);
+        await switchToCloudAccount(newUserId, session.user.email);
       } catch (e) {
         console.warn('cloud save load failed', e);
         toast('Could not load your saved park — check your connection and try again.');

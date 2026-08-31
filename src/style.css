@@ -148,6 +148,8 @@ html, body {
 #sellPanel.hidden { display: none; }
 #sellPanel .small-btn, #sellPanel .big-btn { padding: 6px 12px; font-size: 12px; }
 .sell-total { color: #ffe066; font-size: 14px; font-weight: bold; }
+/* Net-negative total (clearing natural scenery costs money instead of refunding it) */
+.sell-total.sell-total-cost { color: #ff6b5e; }
 #devBadge {
   padding: 6px 12px;
   font-size: 11px;

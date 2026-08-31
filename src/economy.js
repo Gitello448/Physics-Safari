@@ -7,6 +7,11 @@ export const BUILD_COSTS = { path: 10, fence: 15 };
 // purchase price. Applies to structures, animals, and decorations alike.
 export const SELL_RATE = 0.75;
 
+// Clearing naturally-occurring scenery (never purchased, so nothing to
+// refund) costs credits instead — labor to haul it away. Water is priciest
+// since draining/filling it also reshapes the terrain underneath.
+export const CLEAR_COSTS = { tree: 40, rock: 60, bush: 15, water: 100 };
+
 export const QUESTION_REWARDS = {
   easy: 100,
   medium: 200,

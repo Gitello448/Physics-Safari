@@ -143,6 +143,20 @@ export class World {
     return true;
   }
 
+  // Clears a naturally-occurring scenery tile (tree/rock/bush/water). Unlike
+  // removeStructure/removeDecoration this represents paid labor rather than
+  // a refund — the scenery was generated, never purchased. Recomputing
+  // networks afterward matters because clearing blocking scenery can make a
+  // previously-unbuildable tile buildable and can change habitat enclosure.
+  removeScenery(x, y) {
+    if (!this.inBounds(x, y)) return false;
+    const had = this.scenery[y][x];
+    if (!had) return false;
+    this.scenery[y][x] = null;
+    this.recomputeNetworks();
+    return true;
+  }
+
   // Recomputes everything derived from the structures grid. The map is small
   // enough (2,500 tiles) that recomputing all of it on every edit is cheap and
   // avoids subtle bugs from selectively recomputing only "what should have changed".

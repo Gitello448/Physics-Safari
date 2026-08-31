@@ -1,4 +1,5 @@
 import { VISITORS } from './economy.js';
+import { PUBLISHED_VISITORS } from './publishedCharacters.js';
 
 let nextId = 1;
 
@@ -7,8 +8,23 @@ const VIEW_PAUSE_MS = [1800, 4200]; // min/max time spent "observing" at a stop
 
 function randRange([lo, hi]) { return lo + Math.random() * (hi - lo); }
 
+// Independently rolls each registered rare-visitor variant's spawn chance
+// (e.g. Chud, 1/50) and returns the first hit, or null for an ordinary
+// visitor — the overwhelming majority of spawns. Generic over whatever's
+// registered in PUBLISHED_VISITORS, so adding another rare variant later
+// doesn't need any changes here.
+function rollVisitorVariant() {
+  for (const [key, def] of Object.entries(PUBLISHED_VISITORS)) {
+    if (Math.random() < (def.spawnChance || 0)) return key;
+  }
+  return null;
+}
+
 export class Visitor {
-  constructor(spawnTile) {
+  // `forceVariant` lets a developer-only manual spawn bypass the random
+  // roll to test a rare variant on demand, without affecting the normal
+  // population's odds at all.
+  constructor(spawnTile, forceVariant) {
     this.id = nextId++;
     this.x = spawnTile.x + 0.5;
     this.y = spawnTile.y + 0.5;
@@ -20,6 +36,7 @@ export class Visitor {
     this.pauseTimer = 0;
     this.stopsRemaining = 3 + Math.floor(Math.random() * 4);
     this.colorIndex = Math.floor(Math.random() * 6);
+    this.variant = forceVariant || rollVisitorVariant();
   }
 
   get tileX() { return Math.floor(this.x); }

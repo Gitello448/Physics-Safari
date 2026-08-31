@@ -346,7 +346,14 @@ export function drawFence(ctx, px, py, size, mask) {
 
 const VISITOR_SHIRTS = ['#d94f4f', '#4f7fd9', '#4fbf6b', '#d9a13f', '#8a4fd9', '#d94f9c'];
 
-export function drawVisitor(ctx, px, py, size, facing, animT, colorIndex) {
+export function drawVisitor(ctx, px, py, size, facing, animT, colorIndex, variantKey, spriteFrames, state) {
+  if (spriteFrames) {
+    // variantKey (e.g. "chud") is the sprite cache key — distinct from any
+    // published animal's key, and from any other rare visitor variant, so
+    // frames never collide in getSpriteFrame's cache.
+    drawSpriteAnimal(ctx, px, py, size, `visitor:${variantKey}`, facing, animT, spriteFrames, state);
+    return;
+  }
   const bob = Math.abs(Math.sin(animT / 180)) * size * 0.05;
   const cx = px + size / 2;
   const cy = py + size / 2 - bob;

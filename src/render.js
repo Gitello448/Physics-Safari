@@ -1,6 +1,7 @@
 import { TILE, STRUCTURE } from './world.js';
 import { drawGrassTile, drawTree, drawRock, drawBush, drawWater, drawPath, drawFence, drawAnimal, drawVisitor, drawDecoration } from './sprites.js';
 import { ANIMAL_DEFS } from './animals.js';
+import { PUBLISHED_VISITORS } from './publishedCharacters.js';
 
 export function render(ctx, canvas, world, camera, animals, visitors, input, t) {
   ctx.imageSmoothingEnabled = false;
@@ -56,7 +57,9 @@ export function render(ctx, canvas, world, camera, animals, visitors, input, t) 
 
   for (const v of visitors) {
     const s = camera.worldToScreen(v.x * TILE, v.y * TILE);
-    drawVisitor(ctx, s.x - size / 2, s.y - size / 2, size, v.facing, v.animT, v.colorIndex);
+    const variantDef = v.variant ? PUBLISHED_VISITORS[v.variant] : null;
+    const visitorState = v.state === 'walking' || v.state === 'leaving' ? 'walking' : 'idle';
+    drawVisitor(ctx, s.x - size / 2, s.y - size / 2, size, v.facing, v.animT, v.colorIndex, v.variant, variantDef && variantDef.frames, visitorState);
   }
 
   for (const a of animals) {

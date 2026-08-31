@@ -4,8 +4,9 @@ import { attachInput } from './input.js';
 import { render } from './render.js';
 import { Animal, ANIMAL_DEFS } from './animals.js';
 import { DECORATION_DEFS } from './decorations.js';
+import { PUBLISHED_VISITORS } from './publishedCharacters.js';
 import { Visitor, pickDestination, computeAttractionScore, targetVisitorCount } from './visitors.js';
-import { BUILD_COSTS, PASSIVE_REVENUE, VISITORS, SELL_RATE } from './economy.js';
+import { BUILD_COSTS, PASSIVE_REVENUE, VISITORS, SELL_RATE, CLEAR_COSTS } from './economy.js';
 import { SkillMasteryStore } from './physics/mastery.js';
 import { RESEARCH_EVENT, computeReward, LEVEL_TEST } from './physics/rewards.js';
 import { getChapter } from './physics/curriculum.js';
@@ -410,11 +411,15 @@ function awardResearch(amount) {
 
 let currentTool = 'pan';
 
-// --- Sell/remove selection ------------------------------------------------
-// Delete tool now selects (highlights) items instead of removing them
-// instantly; a running total is shown and the player confirms with Sell.
+// --- Sell/remove/clear selection -------------------------------------------
+// Delete tool selects (highlights) items instead of removing them instantly;
+// a running net total is shown and the player confirms once. Selling a
+// player-built/bought thing (animal/structure/decoration) refunds credits
+// (positive value); clearing natural scenery (tree/rock/bush/water) costs
+// credits instead (negative value) — it was never purchased, so there's
+// nothing to refund, matching Clear-vs-Demolish from the Decorations work.
 // Keyed by "x,y" (the anchor tile for multi-tile decorations), each entry
-// is { x, y, target: 'animal'|'structure'|'decoration', sellValue }.
+// is { x, y, target: 'animal'|'structure'|'decoration'|'scenery', value }.
 let removalSelection = new Map();
 const sellPanelEl = document.getElementById('sellPanel');
 const sellCountEl = document.getElementById('sellCount');
@@ -422,16 +427,24 @@ const sellTotalEl = document.getElementById('sellTotal');
 const sellBtn = document.getElementById('sellBtn');
 const sellClearBtn = document.getElementById('sellClearBtn');
 
+function removalTotal() {
+  let total = 0;
+  for (const item of removalSelection.values()) total += item.value;
+  return total;
+}
+
 function updateRemovalUI() {
   const isDeleteTool = currentTool === 'delete';
   sellPanelEl.classList.toggle('hidden', !isDeleteTool);
   if (!isDeleteTool) return;
   const count = removalSelection.size;
-  let total = 0;
-  for (const item of removalSelection.values()) total += item.sellValue;
-  sellCountEl.textContent = count === 0 ? 'Click items to select them for selling' : `${count} item${count === 1 ? '' : 's'} selected`;
-  sellTotalEl.textContent = `🪙${total}`;
-  sellBtn.disabled = count === 0;
+  const total = removalTotal();
+  sellCountEl.textContent = count === 0 ? 'Click items to sell, or natural scenery to clear' : `${count} item${count === 1 ? '' : 's'} selected`;
+  sellTotalEl.textContent = total >= 0 ? `🪙${total}` : `−🪙${-total}`;
+  sellTotalEl.classList.toggle('sell-total-cost', total < 0);
+  const canAffordClear = total >= 0 || devMode || credits >= -total;
+  sellBtn.disabled = count === 0 || !canAffordClear;
+  sellBtn.textContent = total < 0 ? 'Clear' : 'Sell';
 }
 
 function clearRemovalSelection() {
@@ -440,9 +453,9 @@ function clearRemovalSelection() {
 }
 
 function sellSelection() {
-  let total = 0;
+  const total = removalTotal();
+  if (total < 0 && !devMode && credits < -total) return; // guard against a stale/tampered click
   for (const item of removalSelection.values()) {
-    total += item.sellValue;
     if (item.target === 'animal') {
       const a = animalAt(item.x, item.y);
       if (a) animals = animals.filter((an) => an !== a);
@@ -450,6 +463,8 @@ function sellSelection() {
       world.removeStructure(item.x, item.y);
     } else if (item.target === 'decoration') {
       world.removeDecoration(item.x, item.y);
+    } else if (item.target === 'scenery') {
+      world.removeScenery(item.x, item.y);
     }
   }
   const count = removalSelection.size;
@@ -457,6 +472,9 @@ function sellSelection() {
   if (total > 0) {
     toast(`Sold ${count} item${count === 1 ? '' : 's'} for 🪙${total}.`);
     awardCredits(total);
+  } else if (total < 0) {
+    toast(`Cleared ${count} item${count === 1 ? '' : 's'} for 🪙${-total}.`);
+    spend(-total);
   }
   updateRemovalUI();
   persist();
@@ -536,20 +554,44 @@ function closeShopPanel() {
   shopPanelEl.classList.add('hidden');
 }
 
+// Rare park-visitor variants (e.g. Chud) are never purchasable in the real
+// game — they only spawn on their own, rarely, alongside ordinary visitors
+// (see visitors.js). This dev-only card lets the developer account spawn
+// one on demand for testing, without affecting normal spawn odds at all.
+function spawnDevVisitor(variantKey) {
+  if (!world.spawnTile) { toast('No path connected to the entrance yet — nowhere for a visitor to spawn.'); return; }
+  visitors.push(new Visitor(world.spawnTile, variantKey));
+  toast(`Spawned ${PUBLISHED_VISITORS[variantKey]?.name || variantKey}.`);
+  closeShopPanel();
+}
+
 function openShopPanel(catKey) {
   openCategory = catKey;
   const cat = SHOP_CATEGORIES[catKey];
   shopPanelTitleEl.textContent = cat.title.toUpperCase();
   shopGridEl.innerHTML = '';
-  if (cat.items.length === 0) {
+  const items = cat.items.slice();
+  if (catKey === 'animals' && isDeveloperAccount) {
+    for (const [key, def] of Object.entries(PUBLISHED_VISITORS)) {
+      items.push({ icon: def.icon, name: `${def.name} (Dev Spawn)`, devSpawn: key });
+    }
+  }
+  if (items.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'shop-empty';
     empty.textContent = 'Coming soon.';
     shopGridEl.appendChild(empty);
   } else {
-    for (const item of cat.items) {
-      const locked = item.def && !isAnimalUnlocked(item.def);
+    for (const item of items) {
       const btn = document.createElement('button');
+      if (item.devSpawn) {
+        btn.className = 'shop-item';
+        btn.innerHTML = `<span class="shop-item-icon">${item.icon}</span><span class="shop-item-name">${item.name}</span><span class="shop-item-price">Free · Dev</span>`;
+        btn.addEventListener('click', () => spawnDevVisitor(item.devSpawn));
+        shopGridEl.appendChild(btn);
+        continue;
+      }
+      const locked = item.def && !isAnimalUnlocked(item.def);
       btn.className = locked ? 'shop-item shop-item-locked' : 'shop-item';
       const priceHtml = locked
         ? `<span class="shop-item-lock">${unlockLabel(item.def)}</span>`
@@ -589,7 +631,7 @@ updateToolbarActiveStates();
 
 function isPlacementValid(x, y) {
   if (currentTool === 'pan') return true;
-  if (currentTool === 'delete') return !!(animalAt(x, y) || world.structures[y][x] || world.decorations[y][x]);
+  if (currentTool === 'delete') return !!(animalAt(x, y) || world.structures[y][x] || world.decorations[y][x] || world.scenery[y][x]);
   if (currentTool === 'path' || currentTool === 'fence') {
     return world.isBuildable(x, y) && !world.structures[y][x];
   }
@@ -676,7 +718,7 @@ function onAction(x, y) {
     const a = animalAt(x, y);
     if (a) {
       const price = ANIMAL_DEFS[a.species].cost;
-      removalSelection.set(key, { x, y, target: 'animal', sellValue: Math.round(price * SELL_RATE) });
+      removalSelection.set(key, { x, y, target: 'animal', value: Math.round(price * SELL_RATE) });
       updateRemovalUI();
       return;
     }
@@ -686,7 +728,7 @@ function onAction(x, y) {
       const anchorKey = `${dec.anchorX},${dec.anchorY}`;
       if (removalSelection.has(anchorKey)) { removalSelection.delete(anchorKey); updateRemovalUI(); return; }
       const price = DECORATION_DEFS[dec.type].cost;
-      removalSelection.set(anchorKey, { x: dec.anchorX, y: dec.anchorY, target: 'decoration', sellValue: Math.round(price * SELL_RATE) });
+      removalSelection.set(anchorKey, { x: dec.anchorX, y: dec.anchorY, target: 'decoration', value: Math.round(price * SELL_RATE) });
       updateRemovalUI();
       return;
     }
@@ -694,7 +736,15 @@ function onAction(x, y) {
     const st = world.structures[y][x];
     if (st) {
       const price = BUILD_COSTS[st.kind];
-      removalSelection.set(key, { x, y, target: 'structure', sellValue: Math.round(price * SELL_RATE) });
+      removalSelection.set(key, { x, y, target: 'structure', value: Math.round(price * SELL_RATE) });
+      updateRemovalUI();
+      return;
+    }
+
+    const sc = world.scenery[y][x];
+    if (sc) {
+      const cost = CLEAR_COSTS[sc.type] || 0;
+      removalSelection.set(key, { x, y, target: 'scenery', value: -cost });
       updateRemovalUI();
     }
     return;

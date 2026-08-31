@@ -1,8 +1,8 @@
 // A small, dependency-free pixel-art editor: a paintable grid canvas plus an
 // HSV color wheel and a light&ndash;dark shade slider. Used by characterLab.js
 // to draw individual animation frames. Deliberately simple (paint + erase +
-// clear, no flood-fill/undo) — this is a quick prototyping tool, not a full
-// art package.
+// clear + undo/redo, no flood-fill) — this is a quick prototyping tool, not
+// a full art package.
 
 function hsvToRgb(h, s, v) {
   const c = v * s;
@@ -69,6 +69,37 @@ export function createPixelEditor(container, { w, h, initialPixels, onionPixels,
   let currentColor = rgbToHex(...hsvToRgb(hue, sat, val));
   let tool = 'paint'; // paint | erase | eyedropper
   let brushSize = initialBrushSize || 1;
+
+  // ---- undo/redo: whole-canvas snapshots, one per stroke (not per pixel) ----
+  const MAX_UNDO = 50;
+  let undoStack = [];
+  let redoStack = [];
+  function pushUndo() {
+    undoStack.push(pixels.slice());
+    if (undoStack.length > MAX_UNDO) undoStack.shift();
+    redoStack.length = 0;
+    updateUndoButtons();
+  }
+  function undo() {
+    if (undoStack.length === 0) return;
+    redoStack.push(pixels.slice());
+    const prev = undoStack.pop();
+    for (let i = 0; i < prev.length; i++) pixels[i] = prev[i];
+    drawGrid();
+    updateUndoButtons();
+  }
+  function redo() {
+    if (redoStack.length === 0) return;
+    undoStack.push(pixels.slice());
+    const next = redoStack.pop();
+    for (let i = 0; i < next.length; i++) pixels[i] = next[i];
+    drawGrid();
+    updateUndoButtons();
+  }
+  function updateUndoButtons() {
+    if (undoBtn) undoBtn.disabled = undoStack.length === 0;
+    if (redoBtn) redoBtn.disabled = redoStack.length === 0;
+  }
 
   function drawGrid() {
     gctx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
@@ -141,6 +172,7 @@ export function createPixelEditor(container, { w, h, initialPixels, onionPixels,
   let painting = false;
   const onDown = (e) => {
     if (tool === 'eyedropper') { pickColorAt(e.clientX, e.clientY); return; }
+    pushUndo(); // one snapshot per stroke, taken before the stroke's first pixel changes
     painting = true;
     paintAt(e.clientX, e.clientY);
   };
@@ -150,6 +182,19 @@ export function createPixelEditor(container, { w, h, initialPixels, onionPixels,
   window.addEventListener('mousemove', onMove);
   window.addEventListener('mouseup', onUp);
   gridCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  // Ctrl/Cmd+Z to undo, Ctrl/Cmd+Shift+Z (or Ctrl+Y) to redo — skipped while
+  // typing in an unrelated text field (e.g. the prototype name input).
+  const onKeyDown = (e) => {
+    const tag = document.activeElement && document.activeElement.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (!(e.ctrlKey || e.metaKey)) return;
+    const key = e.key.toLowerCase();
+    if (key === 'z' && e.shiftKey) { e.preventDefault(); redo(); }
+    else if (key === 'z') { e.preventDefault(); undo(); }
+    else if (key === 'y') { e.preventDefault(); redo(); }
+  };
+  window.addEventListener('keydown', onKeyDown);
 
   // ---- color wheel (hue = angle, saturation = radius) ----
   const WHEEL_SIZE = 140;
@@ -235,6 +280,12 @@ export function createPixelEditor(container, { w, h, initialPixels, onionPixels,
   eyedropperBtn.type = 'button'; eyedropperBtn.className = 'pe-tool-btn'; eyedropperBtn.textContent = '💧 Match Color';
   const clearBtn = document.createElement('button');
   clearBtn.type = 'button'; clearBtn.className = 'pe-tool-btn'; clearBtn.textContent = '🗑 Clear frame';
+  const undoBtn = document.createElement('button');
+  undoBtn.type = 'button'; undoBtn.className = 'pe-tool-btn'; undoBtn.textContent = '↶ Undo'; undoBtn.disabled = true;
+  undoBtn.title = 'Ctrl/Cmd+Z';
+  const redoBtn = document.createElement('button');
+  redoBtn.type = 'button'; redoBtn.className = 'pe-tool-btn'; redoBtn.textContent = '↷ Redo'; redoBtn.disabled = true;
+  redoBtn.title = 'Ctrl/Cmd+Shift+Z';
   const toolButtons = { paint: paintBtn, erase: eraseBtn, eyedropper: eyedropperBtn };
   function setTool(name) {
     tool = name;
@@ -244,8 +295,17 @@ export function createPixelEditor(container, { w, h, initialPixels, onionPixels,
   paintBtn.addEventListener('click', () => setTool('paint'));
   eraseBtn.addEventListener('click', () => setTool('erase'));
   eyedropperBtn.addEventListener('click', () => setTool('eyedropper'));
-  clearBtn.addEventListener('click', () => { pixels.fill(null); drawGrid(); });
+  clearBtn.addEventListener('click', () => {
+    if (pixels.every((p) => p === null)) return; // nothing there to clear or confirm
+    if (!window.confirm('Clear this entire frame? (You can Undo right after if this was a mistake.)')) return;
+    pushUndo();
+    pixels.fill(null);
+    drawGrid();
+  });
+  undoBtn.addEventListener('click', undo);
+  redoBtn.addEventListener('click', redo);
   toolsRow.appendChild(paintBtn); toolsRow.appendChild(eraseBtn); toolsRow.appendChild(eyedropperBtn); toolsRow.appendChild(clearBtn);
+  toolsRow.appendChild(undoBtn); toolsRow.appendChild(redoBtn);
 
   // ---- brush size ----
   const brushRow = document.createElement('div');
@@ -310,6 +370,7 @@ export function createPixelEditor(container, { w, h, initialPixels, onionPixels,
     getPixels: () => pixels.slice(),
     getBrushSize: () => brushSize,
     setPixels: (arr) => {
+      pushUndo(); // e.g. "Copy previous frame" — make that one-click overwrite undoable too
       if (arr && arr.length === w * h) {
         for (let i = 0; i < arr.length; i++) pixels[i] = arr[i];
       } else {
@@ -317,9 +378,11 @@ export function createPixelEditor(container, { w, h, initialPixels, onionPixels,
       }
       drawGrid();
     },
+    undo, redo,
     destroy: () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('keydown', onKeyDown);
     },
   };
 }

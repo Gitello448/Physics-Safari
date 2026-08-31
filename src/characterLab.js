@@ -41,6 +41,12 @@ export function createCharacterLab({ root, getUserId, getIsDeveloper }) {
 
   function render(html) {
     stopPreview();
+    // Every screen transition — including navigating between frames of the
+    // same prototype, which calls render() again via showFrameEditor() —
+    // discards whatever pixelEditor instance was showing. Tear its window-
+    // level listeners (mousemove/mouseup/keydown for undo) down first, or
+    // they'd pile up one stale set per frame visited all session.
+    if (pixelEditor) { pixelEditor.destroy(); pixelEditor = null; }
     root.innerHTML = html;
   }
 
@@ -56,6 +62,7 @@ export function createCharacterLab({ root, getUserId, getIsDeveloper }) {
   }
   function close() {
     stopPreview();
+    if (pixelEditor) { pixelEditor.destroy(); pixelEditor = null; }
     root.classList.add('hidden');
     document.getElementById('charLabBackdrop').classList.add('hidden');
   }
@@ -190,6 +197,12 @@ export function createCharacterLab({ root, getUserId, getIsDeveloper }) {
   }
 
   async function removePrototype(id) {
+    const p = prototypes.find((x) => x.id === id);
+    // A hard delete from the database with no trash/recovery — the one
+    // action here undo can't reach after the fact, so it gets a confirm
+    // instead (matching Clear Frame, Remove This Frame, and Copy Frame 1 →
+    // All, which all guard their own irreversible moves the same way).
+    if (!window.confirm(`Delete "${p ? p.name : 'this prototype'}"? This cannot be undone.`)) return;
     try {
       await deletePrototype(id);
     } catch (e) { /* fall through to refresh either way */ }

@@ -53,7 +53,12 @@ export class Animal {
     this.species = species;
     this.x = tileX + 0.5; // world tile-space position (float, center of tile = .5)
     this.y = tileY + 0.5;
-    this.state = 'idle'; // idle | walking | stuck
+    this.state = 'idle'; // idle | walking — animation/movement state, independent of `escaped`
+    // Set once its enclosure gets breached (a fence tile sold out from under
+    // it) — never reset by save/load: it's re-derived fresh from the
+    // habitat check below every tick, same as the habitat lookup itself.
+    this.escaped = false;
+    this.eatCooldown = 0; // ms remaining before an escaped animal can catch another guest
     this.idleTimer = 1000 + Math.random() * 2000;
     this.path = null;
     this.pathIndex = 0;
@@ -66,46 +71,67 @@ export class Animal {
 
   update(dt, world) {
     this.animT += dt;
-    // Look up the habitat fresh from the animal's current tile rather than trusting
-    // a cached id: habitat ids are reassigned on every recompute (any fence changing
-    // anywhere on the map), so a stored id goes stale immediately. Spatial containment
-    // ("what encloses me right now") is the only thing that stays meaningful.
-    const habitat = world.habitatAt(this.tileX, this.tileY);
+    if (this.eatCooldown > 0) this.eatCooldown = Math.max(0, this.eatCooldown - dt);
 
-    if (!habitat || !habitat.enclosed) {
-      this.state = 'stuck';
-      this.path = null;
+    if (!this.escaped) {
+      // Look up the habitat fresh from the animal's current tile rather than trusting
+      // a cached id: habitat ids are reassigned on every recompute (any fence changing
+      // anywhere on the map), so a stored id goes stale immediately. Spatial containment
+      // ("what encloses me right now") is the only thing that stays meaningful.
+      const habitat = world.habitatAt(this.tileX, this.tileY);
+      if (!habitat || !habitat.enclosed) {
+        // The enclosure around this animal just broke (its fence was sold) —
+        // it's loose in the park now, not merely frozen. Give it a short
+        // beat before it starts moving so the break reads clearly.
+        this.escaped = true;
+        this.state = 'idle';
+        this.path = null;
+        this.pathIndex = 0;
+        this.idleTimer = 300 + Math.random() * 500;
+        return;
+      }
+      if (this.state === 'idle') {
+        this.idleTimer -= dt;
+        if (this.idleTimer <= 0) this.pickDestination(world, habitat);
+        return;
+      }
+      if (this.state === 'walking' && this.path) this.stepAlongPath(dt);
       return;
     }
-    if (this.state === 'stuck') this.state = 'idle';
 
+    // Escaped: no habitat to respect anymore, just wander any walkable tile.
     if (this.state === 'idle') {
       this.idleTimer -= dt;
-      if (this.idleTimer <= 0) this.pickDestination(world, habitat);
+      if (this.idleTimer <= 0) this.pickWanderStep(world);
       return;
     }
+    if (this.state === 'walking' && this.path) this.stepAlongPath(dt);
+  }
 
-    if (this.state === 'walking' && this.path) {
-      const speed = (ANIMAL_DEFS[this.species]?.speed || 1) * (dt / 1000);
-      const target = this.path[this.pathIndex];
-      if (!target) { this.state = 'idle'; this.idleTimer = 1500 + Math.random() * 2500; return; }
-      const tx = target.x + 0.5, ty = target.y + 0.5;
-      const dx = tx - this.x, dy = ty - this.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist < speed) {
-        this.x = tx; this.y = ty;
-        this.pathIndex++;
-        if (this.pathIndex >= this.path.length) {
-          this.state = 'idle';
-          this.idleTimer = 1500 + Math.random() * 3000;
-          this.path = null;
-        }
-      } else {
-        this.x += (dx / dist) * speed;
-        this.y += (dy / dist) * speed;
-        if (Math.abs(dx) > 0.01) this.facing = dx > 0 ? 1 : -1;
+  stepAlongPath(dt) {
+    const speed = (ANIMAL_DEFS[this.species]?.speed || 1) * (dt / 1000);
+    const target = this.path[this.pathIndex];
+    if (!target) { this.state = 'idle'; this.idleTimer = this.restTime(); this.path = null; return; }
+    const tx = target.x + 0.5, ty = target.y + 0.5;
+    const dx = tx - this.x, dy = ty - this.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < speed) {
+      this.x = tx; this.y = ty;
+      this.pathIndex++;
+      if (this.pathIndex >= this.path.length) {
+        this.state = 'idle';
+        this.idleTimer = this.restTime();
+        this.path = null;
       }
+    } else {
+      this.x += (dx / dist) * speed;
+      this.y += (dy / dist) * speed;
+      if (Math.abs(dx) > 0.01) this.facing = dx > 0 ? 1 : -1;
     }
+  }
+
+  restTime() {
+    return this.escaped ? 800 + Math.random() * 1200 : 1500 + Math.random() * 3000;
   }
 
   pickDestination(world, habitat) {
@@ -123,5 +149,21 @@ export class Animal {
       }
     }
     this.idleTimer = 1500;
+  }
+
+  // Escaped animals aren't confined to a habitat's tile set, so there's no
+  // fixed pool to BFS toward — just take one random walkable step at a time
+  // across the whole map. Cheap, and reads as "prowling" rather than
+  // beelining somewhere specific, which fits loose-in-the-park better anyway.
+  pickWanderStep(world) {
+    const cx = this.tileX, cy = this.tileY;
+    const candidates = [[cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]]
+      .map(([x, y]) => ({ x, y }))
+      .filter((t) => world.isWalkable(t.x, t.y));
+    if (candidates.length === 0) { this.idleTimer = 1000; return; }
+    const target = candidates[Math.floor(Math.random() * candidates.length)];
+    this.path = [{ x: cx, y: cy }, target];
+    this.pathIndex = 1;
+    this.state = 'walking';
   }
 }

@@ -41,6 +41,15 @@ export const PASSIVE_REVENUE = {
   maxPerTick: 40,
 };
 
+// An escaped animal (a fence sold out from under it while it had a habitat)
+// roaming loose in the park is a real hazard, not just a stray sprite.
+export const PREDATION = {
+  fine: 500, // credits lost each time an escaped animal catches a guest ("sued")
+  eatRadius: 0.6, // tile-distance within which an escaped animal can catch a visitor
+  eatCooldownMs: 5000, // minimum time between catches for the same animal
+  scareRadius: 3.5, // tiles — visitors this close to a blood spot flee for the exit
+};
+
 export const VISITORS = {
   maxVisitors: 40,
   baselineTarget: 2, // a completely empty park still gets a couple of curious visitors

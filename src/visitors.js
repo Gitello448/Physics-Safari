@@ -42,6 +42,21 @@ export class Visitor {
   get tileX() { return Math.floor(this.x); }
   get tileY() { return Math.floor(this.y); }
 
+  // Scared off by a blood spot: drop whatever they were doing and head
+  // straight for the exit. Distinct from the natural end-of-visit 'leaving'
+  // only in that it interrupts an in-progress walk immediately instead of
+  // waiting to arrive wherever they were already headed — update() picks the
+  // route to world.spawnTile up on its very next tick since state is already
+  // 'leaving' with no path queued.
+  flee(world) {
+    if (this.state === 'gone' || this.state === 'leaving') return;
+    this.state = 'leaving';
+    this.path = null;
+    this.pathIndex = 0;
+    this.pauseTimer = 0;
+    this.stopsRemaining = 0;
+  }
+
   update(dt, world, destinationPicker) {
     this.animT += dt;
     if (this.state === 'gone') return;

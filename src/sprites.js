@@ -71,6 +71,28 @@ export function drawBush(ctx, px, py, size) {
   }
 }
 
+// A splat left behind where an escaped animal caught a guest. Deliberately
+// grim (it's meant to read as a real problem to go clean up), but drawn as
+// simple irregular blobs so it stays consistent with the other flat-shaded
+// scenery rather than trying to be photorealistic.
+export function drawBloodSpot(ctx, px, py, size) {
+  ctx.fillStyle = '#5a0e0e';
+  for (const [dx, dy, rx, ry] of [
+    [0.5, 0.55, 0.32, 0.2],
+    [0.32, 0.42, 0.14, 0.1],
+    [0.68, 0.62, 0.12, 0.09],
+    [0.4, 0.7, 0.1, 0.07],
+  ]) {
+    ctx.beginPath();
+    ctx.ellipse(px + size * dx, py + size * dy, size * rx, size * ry, 0.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.fillStyle = '#8a1a1a';
+  ctx.beginPath();
+  ctx.ellipse(px + size * 0.46, py + size * 0.5, size * 0.18, size * 0.1, 0.3, 0, Math.PI * 2);
+  ctx.fill();
+}
+
 export function drawWater(ctx, px, py, size, t) {
   ctx.fillStyle = '#3a6fa0';
   ctx.beginPath();

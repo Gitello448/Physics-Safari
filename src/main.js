@@ -6,7 +6,7 @@ import { Animal, ANIMAL_DEFS } from './animals.js';
 import { DECORATION_DEFS } from './decorations.js';
 import { PUBLISHED_VISITORS } from './publishedCharacters.js';
 import { Visitor, pickDestination, computeAttractionScore, targetVisitorCount } from './visitors.js';
-import { BUILD_COSTS, PASSIVE_REVENUE, VISITORS, SELL_RATE, CLEAR_COSTS } from './economy.js';
+import { BUILD_COSTS, PASSIVE_REVENUE, VISITORS, SELL_RATE, CLEAR_COSTS, PREDATION } from './economy.js';
 import { SkillMasteryStore } from './physics/mastery.js';
 import { RESEARCH_EVENT, computeReward, LEVEL_TEST } from './physics/rewards.js';
 import { getChapter } from './physics/curriculum.js';
@@ -181,6 +181,7 @@ function currentGameStateBlob() {
     researchPoints,
     structures: world.exportStructures(),
     animals: animals.map((a) => ({ species: a.species, x: a.tileX, y: a.tileY })),
+    bloodSpots: world.exportBloodSpots(),
     mastery: mastery.toJSON(),
   };
 }
@@ -191,6 +192,10 @@ function applyGameStateBlob(data) {
   world.clearStructures();
   if (Array.isArray(data.structures)) world.loadStructures(data.structures);
   animals = Array.isArray(data.animals) ? data.animals.map(({ species, x, y }) => new Animal(species, x, y)) : [];
+  // Not restoring `escaped` here on purpose — it's re-derived the moment
+  // update() runs, from world.habitatAt() at the loaded position, same as
+  // any other tick. If the fence is still gone, it re-escapes immediately.
+  world.loadBloodSpots(Array.isArray(data.bloodSpots) ? data.bloodSpots : []);
   mastery.bySkill = new SkillMasteryStore(data.mastery && typeof data.mastery === 'object' ? data.mastery : {}).bySkill;
   updateCreditsUI();
   updateResearchUI();
@@ -224,7 +229,7 @@ async function flushCloudSave(userId) {
     await writeCloudSave(userId, {
       credits: blob.credits,
       researchPoints: blob.researchPoints,
-      parkState: { structures: blob.structures, animals: blob.animals },
+      parkState: { structures: blob.structures, animals: blob.animals, bloodSpots: blob.bloodSpots },
       curriculumState: { mastery: blob.mastery },
     });
   } catch (e) {
@@ -304,6 +309,7 @@ async function switchToCloudAccount(userId, email) {
       researchPoints: row.research_points,
       structures: row.park_state.structures,
       animals: row.park_state.animals,
+      bloodSpots: row.park_state.bloodSpots,
       mastery: (row.curriculum_state && row.curriculum_state.mastery) || {},
     });
     toast('Loaded your saved park.');
@@ -439,12 +445,13 @@ function updateRemovalUI() {
   if (!isDeleteTool) return;
   const count = removalSelection.size;
   const total = removalTotal();
-  sellCountEl.textContent = count === 0 ? 'Click items to sell, or natural scenery to clear' : `${count} item${count === 1 ? '' : 's'} selected`;
+  sellCountEl.textContent = count === 0 ? 'Click items to sell, scenery to clear, or blood to clean' : `${count} item${count === 1 ? '' : 's'} selected`;
   sellTotalEl.textContent = total >= 0 ? `🪙${total}` : `−🪙${-total}`;
   sellTotalEl.classList.toggle('sell-total-cost', total < 0);
   const canAffordClear = total >= 0 || devMode || credits >= -total;
   sellBtn.disabled = count === 0 || !canAffordClear;
-  sellBtn.textContent = total < 0 ? 'Clear' : 'Sell';
+  const allFree = count > 0 && Array.from(removalSelection.values()).every((item) => item.value === 0);
+  sellBtn.textContent = allFree ? 'Clean' : total < 0 ? 'Clear' : 'Sell';
 }
 
 function clearRemovalSelection() {
@@ -465,6 +472,8 @@ function sellSelection() {
       world.removeDecoration(item.x, item.y);
     } else if (item.target === 'scenery') {
       world.removeScenery(item.x, item.y);
+    } else if (item.target === 'bloodSpot') {
+      world.removeBloodSpot(item.x, item.y);
     }
   }
   const count = removalSelection.size;
@@ -475,6 +484,8 @@ function sellSelection() {
   } else if (total < 0) {
     toast(`Cleared ${count} item${count === 1 ? '' : 's'} for 🪙${-total}.`);
     spend(-total);
+  } else if (count > 0) {
+    toast(`Cleaned ${count} item${count === 1 ? '' : 's'}.`);
   }
   updateRemovalUI();
   persist();
@@ -631,7 +642,7 @@ updateToolbarActiveStates();
 
 function isPlacementValid(x, y) {
   if (currentTool === 'pan') return true;
-  if (currentTool === 'delete') return !!(animalAt(x, y) || world.structures[y][x] || world.decorations[y][x] || world.scenery[y][x]);
+  if (currentTool === 'delete') return !!(animalAt(x, y) || world.structures[y][x] || world.decorations[y][x] || world.scenery[y][x] || world.bloodSpots.has(`${x},${y}`));
   if (currentTool === 'path' || currentTool === 'fence') {
     return world.isBuildable(x, y) && !world.structures[y][x];
   }
@@ -719,6 +730,17 @@ function onAction(x, y) {
     if (a) {
       const price = ANIMAL_DEFS[a.species].cost;
       removalSelection.set(key, { x, y, target: 'animal', value: Math.round(price * SELL_RATE) });
+      updateRemovalUI();
+      return;
+    }
+
+    // Checked ahead of structures/decorations/scenery on purpose: a blood
+    // spot almost always sits on the path tile a guest was standing on when
+    // they were caught, so if this check came after the structure check
+    // below, the path would always shadow it and the spot could never be
+    // selected at all.
+    if (world.bloodSpots.has(key)) {
+      removalSelection.set(key, { x, y, target: 'bloodSpot', value: 0 });
       updateRemovalUI();
       return;
     }
@@ -862,12 +884,51 @@ function updateVisitorPopulation(dt) {
   visitorEl.textContent = visitors.length;
 }
 
+// --- Escaped animals: a breached enclosure isn't just cosmetic. A loose
+// animal that reaches a guest eats them, fines the player, and leaves a
+// blood spot that scares nearby visitors off until it's cleaned up. ---------
+function updateEscapedAnimalPredation() {
+  for (const a of animals) {
+    if (!a.escaped || a.eatCooldown > 0) continue;
+    const victim = visitors.find((v) => v.state !== 'gone' && Math.hypot(v.x - a.x, v.y - a.y) <= PREDATION.eatRadius);
+    if (victim) eatVisitor(a, victim);
+  }
+}
+
+function eatVisitor(animal, visitor) {
+  visitor.state = 'gone';
+  animal.eatCooldown = PREDATION.eatCooldownMs;
+  world.addBloodSpot(visitor.tileX, visitor.tileY);
+  spend(PREDATION.fine); // a fine, not a purchase — allowed to push credits negative
+  const name = ANIMAL_DEFS[animal.species]?.name || 'An escaped animal';
+  toast(`🚨 Sued! ${name} ate a guest. −🪙${PREDATION.fine}. Park income is halted until you clean up the blood.`);
+  persist();
+}
+
+// Any visitor near a blood spot bolts for the exit — checked on an interval
+// (not every frame) since it only matters while a spot actually exists.
+let scareCheckAccum = 0;
+function updateScaredVisitors(dt) {
+  if (world.bloodSpots.size === 0) return;
+  scareCheckAccum += dt;
+  if (scareCheckAccum < 500) return;
+  scareCheckAccum = 0;
+  for (const v of visitors) {
+    if (v.state === 'gone' || v.state === 'leaving') continue;
+    for (const spot of world.bloodSpots.values()) {
+      const dx = v.x - (spot.x + 0.5), dy = v.y - (spot.y + 0.5);
+      if (Math.hypot(dx, dy) <= PREDATION.scareRadius) { v.flee(world); break; }
+    }
+  }
+}
+
 // --- Passive park revenue (deliberately small next to expedition rewards) ---
 let revenueAccum = 0;
 function updatePassiveRevenue(dt) {
   revenueAccum += dt;
   if (revenueAccum < PASSIVE_REVENUE.tickMs) return;
   revenueAccum = 0;
+  if (world.bloodSpots.size > 0) return; // an uncleaned mess scares guests off — no income until it's gone
 
   const speciesVariety = new Set(animals.map((a) => a.species)).size;
   const raw = PASSIVE_REVENUE.base
@@ -917,6 +978,7 @@ function resetMyPark() {
   if (!window.confirm('Reset your park? This removes every animal, path, fence, and decoration, and restores your starting credits. Your physics progress is NOT affected. This cannot be undone.')) return;
   world.clearStructures();
   world.clearDecorations();
+  world.clearBloodSpots();
   animals = [];
   credits = 5000;
   researchPoints = 0;
@@ -946,7 +1008,9 @@ function loop(t) {
 
   if (!eduUI.isOpen()) input.panFromKeys(dt);
   for (const a of animals) a.update(dt, world);
+  updateEscapedAnimalPredation();
   updateVisitorPopulation(dt);
+  updateScaredVisitors(dt);
   updatePassiveRevenue(dt);
 
   render(ctx, canvas, world, camera, animals, visitors, input.state, t);

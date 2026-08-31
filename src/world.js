@@ -45,6 +45,11 @@ export class World {
     // path-network/enclosure connectivity). A decoration just occupies and
     // blocks its tile, like blocking scenery does.
     this.decorations = this.emptyGrid(null);
+    // Left behind when an escaped animal catches a guest — not player-placed
+    // and not sellable, just a mess that scares visitors off until cleaned.
+    // A Map (not a grid) since spots are rare and we mostly need to iterate
+    // "every current spot", not random-access a tile.
+    this.bloodSpots = new Map(); // "x,y" -> {x, y}
     this.habitatId = this.emptyGrid(-1);
     this.habitats = new Map(); // id -> {tiles:Set<"x,y">, enclosed:bool}
     this._nextHabitatId = 1;
@@ -434,6 +439,31 @@ export class World {
   clearDecorations() {
     this.decorations = this.emptyGrid(null);
     this.recomputeNetworks();
+  }
+
+  addBloodSpot(x, y) {
+    if (!this.inBounds(x, y)) return false;
+    this.bloodSpots.set(`${x},${y}`, { x, y });
+    return true;
+  }
+
+  removeBloodSpot(x, y) {
+    return this.bloodSpots.delete(`${x},${y}`);
+  }
+
+  clearBloodSpots() {
+    this.bloodSpots = new Map();
+  }
+
+  exportBloodSpots() {
+    return Array.from(this.bloodSpots.values()).map(({ x, y }) => ({ x, y }));
+  }
+
+  loadBloodSpots(list) {
+    this.bloodSpots = new Map();
+    for (const { x, y } of list || []) {
+      if (this.inBounds(x, y)) this.bloodSpots.set(`${x},${y}`, { x, y });
+    }
   }
 
   habitatAt(x, y) {

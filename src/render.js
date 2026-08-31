@@ -1,5 +1,5 @@
 import { TILE, STRUCTURE } from './world.js';
-import { drawGrassTile, drawTree, drawRock, drawBush, drawWater, drawPath, drawFence, drawAnimal, drawVisitor, drawDecoration } from './sprites.js';
+import { drawGrassTile, drawTree, drawRock, drawBush, drawWater, drawPath, drawFence, drawAnimal, drawVisitor, drawDecoration, drawBloodSpot } from './sprites.js';
 import { ANIMAL_DEFS } from './animals.js';
 import { PUBLISHED_VISITORS } from './publishedCharacters.js';
 
@@ -52,6 +52,13 @@ export function render(ctx, canvas, world, camera, animals, visitors, input, t) 
     }
   }
 
+  // Rare enough (almost always zero) that iterating all of them each frame
+  // and letting the canvas clip anything offscreen is simpler than culling.
+  for (const spot of world.bloodSpots.values()) {
+    const s = camera.worldToScreen(spot.x * TILE, spot.y * TILE);
+    drawBloodSpot(ctx, s.x, s.y, size);
+  }
+
   drawHQ(ctx, world, camera, size);
   drawEntrance(ctx, world, camera, size, t);
 
@@ -66,9 +73,11 @@ export function render(ctx, canvas, world, camera, animals, visitors, input, t) 
     const s = camera.worldToScreen(a.x * TILE, a.y * TILE);
     const def = ANIMAL_DEFS[a.species];
     drawAnimal(ctx, s.x - size / 2, s.y - size / 2, size, a.species, a.facing, a.animT, def && def.frames, a.state);
-    if (a.state === 'stuck') {
+    if (a.escaped) {
+      // A loose animal is a real hazard, not just a stray sprite — keep a
+      // marker over it so it reads clearly against the ordinary herd.
       ctx.font = `${Math.max(10, size * 0.4)}px sans-serif`;
-      ctx.fillText('⚠️', s.x - size * 0.15, s.y - size * 0.4);
+      ctx.fillText('🚨', s.x - size * 0.15, s.y - size * 0.4);
     }
   }
 

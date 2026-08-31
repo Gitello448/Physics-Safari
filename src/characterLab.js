@@ -24,7 +24,11 @@ export const CHARACTER_TEMPLATES = {
   mediumAnimal: { label: 'Medium Animal', desc: '1×1 tile · zebra scale', frame: { w: 64, h: 96 }, frames: ANIMATED_FRAMES },
   largeAnimal: { label: 'Large Animal', desc: '1×1 tile (movement) · tall art · giraffe/rhino scale', frame: { w: 64, h: 128 }, frames: ANIMATED_FRAMES },
   decoration: { label: 'Decoration', desc: '2×2 tiles · static, no animation', frame: { w: 128, h: 160 }, frames: STATIC_FRAMES },
-  building: { label: 'Building / Attraction', desc: 'provisional sizing · static', frame: { w: 192, h: 224 }, frames: STATIC_FRAMES },
+  building: { label: 'Building', desc: 'provisional sizing · static, no animation', frame: { w: 192, h: 224 }, frames: STATIC_FRAMES },
+  // Open-ended frame count instead of a fixed list — for things like a
+  // roller coaster where you don't know up front how many frames you'll
+  // want. Starts at 1 frame; "Add Frame" appends more as you go.
+  attraction: { label: 'Attraction', desc: 'provisional sizing · animated, add frames as you go', frame: { w: 192, h: 224 }, variableFrames: true },
 };
 
 export function createCharacterLab({ root, getUserId, getIsDeveloper }) {
@@ -60,10 +64,33 @@ export function createCharacterLab({ root, getUserId, getIsDeveloper }) {
     if (previewTimer) { clearInterval(previewTimer); previewTimer = null; }
   }
 
-  function frameCount(p) {
-    const total = CHARACTER_TEMPLATES[p.template]?.frames.length || 0;
+  // Ordered list of frame keys for the prototype currently being edited —
+  // a fixed list for animal/visitor templates, or the growable list built
+  // up via Add Frame for a variableFrames template (e.g. Attraction).
+  function currentFrameKeys() {
+    const tpl = CHARACTER_TEMPLATES[editing.template];
+    if (!tpl.variableFrames) return tpl.frames;
+    if (!editing.frameOrder || editing.frameOrder.length === 0) editing.frameOrder = ['frame_1'];
+    return editing.frameOrder;
+  }
+
+  function frameOrderFromSavedFrames(frames) {
+    const order = Object.keys(frames || {}).filter((k) => k.startsWith('frame_'));
+    order.sort((a, b) => Number(a.split('_')[1]) - Number(b.split('_')[1]));
+    return order.length > 0 ? order : ['frame_1'];
+  }
+
+  function labelForFrameKey(key) {
+    if (FRAME_LABELS[key]) return FRAME_LABELS[key];
+    const n = key.startsWith('frame_') ? key.split('_')[1] : null;
+    return n ? `Frame ${n}` : key;
+  }
+
+  function frameCountFor(p) {
+    const tpl = CHARACTER_TEMPLATES[p.template];
     const done = Object.values(p.frames || {}).filter((f) => f && f.pixels && f.pixels.some((px) => px)).length;
-    return `${done}/${total} frames`;
+    if (tpl?.variableFrames) return `${done} frame${done === 1 ? '' : 's'}`;
+    return `${done}/${tpl?.frames.length || 0} frames`;
   }
 
   // ---- List screen --------------------------------------------------------
@@ -90,7 +117,7 @@ export function createCharacterLab({ root, getUserId, getIsDeveloper }) {
           <div class="cl-row">
             <div class="cl-row-info">
               <span class="cl-row-name">${escapeHtml(p.name)}</span>
-              <span class="cl-row-meta">${escapeHtml(CHARACTER_TEMPLATES[p.template]?.label || p.template)} · ${frameCount(p)} · ${escapeHtml(p.status)}</span>
+              <span class="cl-row-meta">${escapeHtml(CHARACTER_TEMPLATES[p.template]?.label || p.template)} · ${frameCountFor(p)} · ${escapeHtml(p.status)}</span>
             </div>
             <div class="cl-row-actions">
               <button class="small-btn" data-edit="${p.id}">Edit</button>
@@ -155,6 +182,9 @@ export function createCharacterLab({ root, getUserId, getIsDeveloper }) {
     const p = prototypes.find((x) => x.id === id);
     if (!p) return;
     editing = { id: p.id, name: p.name, template: p.template, frames: p.frames || {} };
+    if (CHARACTER_TEMPLATES[p.template]?.variableFrames) {
+      editing.frameOrder = frameOrderFromSavedFrames(editing.frames);
+    }
     frameIndex = 0;
     showFrameEditor();
   }
@@ -211,21 +241,23 @@ export function createCharacterLab({ root, getUserId, getIsDeveloper }) {
   // ---- Frame editor ---------------------------------------------------------
   function showFrameEditor() {
     const tpl = CHARACTER_TEMPLATES[editing.template];
-    const frames = tpl.frames;
+    const frames = currentFrameKeys();
     const key = frames[frameIndex];
-    const isStatic = frames.length === 1;
+    const isStatic = frames.length === 1 && !tpl.variableFrames;
 
     render(`
       <div class="cl-header">🎨 ${escapeHtml(editing.name)}<span class="cl-sub">${escapeHtml(tpl.label)} · ${tpl.frame.w}×${tpl.frame.h}px</span></div>
       ${isStatic ? '' : `<div class="cl-frame-stepper">
         <button class="small-btn" id="clPrevFrame" ${frameIndex === 0 ? 'disabled' : ''}>‹ Prev</button>
-        <span class="cl-frame-label">Frame ${frameIndex + 1} of ${frames.length} — ${FRAME_LABELS[key]}</span>
+        <span class="cl-frame-label">Frame ${frameIndex + 1} of ${frames.length} — ${labelForFrameKey(key)}</span>
         <button class="small-btn" id="clNextFrame" ${frameIndex === frames.length - 1 ? 'disabled' : ''}>Next ›</button>
       </div>`}
       <div id="clEditorHost"></div>
       <div class="cl-actions">
         ${frameIndex > 0 ? '<button class="small-btn" id="clCopyPrev">Copy previous frame</button>' : ''}
-        ${!isStatic ? '<button class="small-btn" id="clCopyFirstToAll">Copy frame 1 → all frames</button>' : ''}
+        ${!isStatic && !tpl.variableFrames ? '<button class="small-btn" id="clCopyFirstToAll">Copy frame 1 → all frames</button>' : ''}
+        ${tpl.variableFrames ? '<button class="small-btn" id="clAddFrame">+ Add Frame</button>' : ''}
+        ${tpl.variableFrames && frames.length > 1 ? '<button class="small-btn" id="clRemoveFrame">Remove this frame</button>' : ''}
         <button class="big-btn" id="clSaveBtn">Save Draft</button>
         <button class="small-btn" id="clDoneBtn">Done — Back to List</button>
       </div>
@@ -256,6 +288,23 @@ export function createCharacterLab({ root, getUserId, getIsDeveloper }) {
       }
       showFrameEditor();
     });
+    document.getElementById('clAddFrame')?.addEventListener('click', () => {
+      commitCurrentFrame();
+      const order = currentFrameKeys();
+      const nextNum = order.length + 1;
+      order.push(`frame_${nextNum}`);
+      frameIndex = order.length - 1;
+      showFrameEditor();
+    });
+    document.getElementById('clRemoveFrame')?.addEventListener('click', () => {
+      if (!window.confirm('Remove this frame? This cannot be undone.')) return;
+      const order = currentFrameKeys();
+      if (order.length <= 1) return;
+      delete editing.frames[order[frameIndex]];
+      order.splice(frameIndex, 1);
+      frameIndex = Math.min(frameIndex, order.length - 1);
+      showFrameEditor();
+    });
     document.getElementById('clSaveBtn').addEventListener('click', saveDraft);
     document.getElementById('clDoneBtn').addEventListener('click', async () => { commitCurrentFrame(); await saveDraft(); showList(); });
   }
@@ -263,7 +312,7 @@ export function createCharacterLab({ root, getUserId, getIsDeveloper }) {
   function commitCurrentFrame() {
     if (!pixelEditor || !editing) return;
     const tpl = CHARACTER_TEMPLATES[editing.template];
-    const key = tpl.frames[frameIndex];
+    const key = currentFrameKeys()[frameIndex];
     editing.frames[key] = { w: tpl.frame.w, h: tpl.frame.h, pixels: pixelEditor.getPixels() };
     lastBrushSize = pixelEditor.getBrushSize();
   }
@@ -289,13 +338,14 @@ export function createCharacterLab({ root, getUserId, getIsDeveloper }) {
     const p = prototypes.find((x) => x.id === id);
     if (!p) return;
     const tpl = CHARACTER_TEMPLATES[p.template];
-    const isStatic = tpl.frames.length === 1;
+    const isStatic = !tpl.variableFrames && tpl.frames.length === 1;
+    const canMirror = !tpl.variableFrames; // mirroring is a left/right-facing-character thing, not meaningful for a fixed structure like an attraction
     render(`
       <div class="cl-header">🎨 PREVIEW — ${escapeHtml(p.name)}<span class="cl-sub">${escapeHtml(tpl.label)}</span></div>
       <div class="cl-preview-stage">
         <canvas id="clPreviewCanvas" width="240" height="240"></canvas>
       </div>
-      ${isStatic ? '' : '<div class="cl-preview-hint">Cycling idle → walk, mirrored on alternate loops (same as in-game left/right).</div>'}
+      ${isStatic ? '' : `<div class="cl-preview-hint">${canMirror ? 'Cycling idle → walk, mirrored on alternate loops (same as in-game left/right).' : 'Cycling through all frames in order.'}</div>`}
       <div class="cl-actions"><button class="small-btn" id="clBackBtn">← Back</button></div>
     `);
     document.getElementById('clBackBtn').addEventListener('click', showList);
@@ -304,7 +354,9 @@ export function createCharacterLab({ root, getUserId, getIsDeveloper }) {
     const ctx = canvas.getContext('2d');
     ctx.imageSmoothingEnabled = false;
 
-    const frameKeys = isStatic ? ['static'] : ['idle_1', 'idle_2', 'idle_1', 'idle_2', 'walk_1', 'walk_2', 'walk_3', 'walk_4'];
+    const frameKeys = tpl.variableFrames
+      ? frameOrderFromSavedFrames(p.frames)
+      : (isStatic ? ['static'] : ['idle_1', 'idle_2', 'idle_1', 'idle_2', 'walk_1', 'walk_2', 'walk_3', 'walk_4']);
     const framesData = frameKeys.map((k) => p.frames[k]).filter(Boolean);
     if (framesData.length === 0) return;
     const canvases = framesData.map((f) => frameToCanvas(f));
@@ -330,7 +382,7 @@ export function createCharacterLab({ root, getUserId, getIsDeveloper }) {
       ctx.strokeStyle = 'rgba(232,177,58,0.5)';
       ctx.beginPath(); ctx.moveTo(20, canvas.height - 20); ctx.lineTo(canvas.width - 20, canvas.height - 20); ctx.stroke();
       i++;
-      if (i % canvases.length === 0) { loops++; if (loops % 2 === 0) mirror = !mirror; }
+      if (i % canvases.length === 0) { loops++; if (canMirror && loops % 2 === 0) mirror = !mirror; }
     }
     drawFrame();
     previewTimer = setInterval(drawFrame, isStatic ? 1000 : 220);

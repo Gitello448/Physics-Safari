@@ -464,6 +464,7 @@ function isChapterComplete(chapterId) {
 }
 
 function isAnimalUnlocked(def) {
+  if (isDeveloperAccount) return true; // the developer account can test every animal regardless of curriculum progress
   if (!def.unlock || !def.unlock.chapter) return true;
   return isChapterComplete(def.unlock.chapter);
 }

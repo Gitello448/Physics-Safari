@@ -27,7 +27,7 @@ function escapeHtml(str) {
   }[c]));
 }
 
-export function createEduUI({ root, mastery, isDevMode, awardCredits, awardResearch, onClose }) {
+export function createEduUI({ root, mastery, isDevMode, awardCredits, awardResearch, calculator, onClose }) {
   let screen = null;
   let devUnlockAll = false; // dev-only override, resets whenever dev mode is toggled off
   let session = null; // { queue, index, rewarded, label, results:[], researchBonus }
@@ -372,7 +372,7 @@ export function createEduUI({ root, mastery, isDevMode, awardCredits, awardResea
     const problem = spec.archetypeId
       ? generateProblem({ archetypeId: spec.archetypeId, difficulty: spec.difficulty })
       : generateProblem({ skillId: spec.skillId, difficulty: spec.difficulty });
-    current = { problem, hintsRevealed: 0, answered: false };
+    current = { problem, hintsRevealed: 0, answered: false, selectedChoice: null };
 
     renderQuestion();
   }
@@ -388,9 +388,12 @@ export function createEduUI({ root, mastery, isDevMode, awardCredits, awardResea
         <div class="numeric-row">
           <input class="numeric-input" id="numericAnswer" type="text" inputmode="decimal" placeholder="${problem.unit ? `answer (${problem.unit})` : 'answer'}" ${answered ? 'disabled' : ''} />
           <button class="big-btn" id="submitBtn" ${answered ? 'disabled' : ''}>Submit</button>
+          ${calculator ? '<button class="small-btn" id="calcToggleBtn" type="button">🧮 Calculator</button>' : ''}
         </div>`;
     } else {
-      answerArea = `<div class="choice-list">${problem.choices.map((c) => `<button class="choice-btn" data-choice="${escapeHtml(c)}" ${answered ? 'disabled' : ''}>${escapeHtml(c)}</button>`).join('')}</div>`;
+      answerArea = `
+        <div class="choice-list">${problem.choices.map((c) => `<button class="choice-btn ${current.selectedChoice === c ? 'selected' : ''}" data-choice="${escapeHtml(c)}" ${answered ? 'disabled' : ''}>${escapeHtml(c)}</button>`).join('')}</div>
+        <div class="numeric-row"><button class="big-btn" id="mcSubmitBtn" ${answered || current.selectedChoice === null ? 'disabled' : ''}>Submit</button></div>`;
     }
 
     const hintButtons = [0, 1, 2].map((i) => {
@@ -425,6 +428,11 @@ export function createEduUI({ root, mastery, isDevMode, awardCredits, awardResea
       });
     });
 
+    // Wired unconditionally (not just in the !answered branch below) so the
+    // calculator stays usable after submitting too — e.g. to double-check
+    // the given solution's arithmetic against what you got.
+    root.querySelector('#calcToggleBtn')?.addEventListener('click', () => calculator.toggle());
+
     if (!answered) {
       if (problem.type === 'numerical' || problem.type === 'vector') {
         const input = root.querySelector('#numericAnswer');
@@ -433,8 +441,15 @@ export function createEduUI({ root, mastery, isDevMode, awardCredits, awardResea
         input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
         input.focus();
       } else {
+        // Clicking a choice only selects it (highlighted, re-rendered so the
+        // Submit button enables) — grading itself waits for a separate
+        // Submit press, same two-step flow as the numeric answer box.
         root.querySelectorAll('[data-choice]').forEach((btn) => {
-          btn.addEventListener('click', () => submitAnswer(btn.dataset.choice, btn));
+          btn.addEventListener('click', () => { current.selectedChoice = btn.dataset.choice; renderQuestion(); });
+        });
+        root.querySelector('#mcSubmitBtn').addEventListener('click', () => {
+          const chosenBtn = Array.from(root.querySelectorAll('[data-choice]')).find((b) => b.dataset.choice === current.selectedChoice);
+          submitAnswer(current.selectedChoice, chosenBtn);
         });
       }
     } else {
@@ -455,6 +470,8 @@ export function createEduUI({ root, mastery, isDevMode, awardCredits, awardResea
         if (btn.dataset.choice === problem.answer) btn.classList.add('correct');
         else if (btn === chosenBtn) btn.classList.add('incorrect');
       });
+      const mcSubmitBtn = root.querySelector('#mcSubmitBtn');
+      if (mcSubmitBtn) mcSubmitBtn.disabled = true;
     } else {
       root.querySelector('#numericAnswer').disabled = true;
       root.querySelector('#submitBtn').disabled = true;

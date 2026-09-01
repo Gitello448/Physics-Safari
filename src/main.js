@@ -17,6 +17,7 @@ import { ExpeditionScenery } from './expeditionScenery.js';
 import { onAuthStateChange, signUp, signIn, signOut, ensurePlayerRows, fetchCloudSave, writeCloudSave, fetchUserRole } from './auth.js';
 import { createCharacterLab } from './characterLab.js';
 import { createLeaderboard } from './leaderboard.js';
+import { createCalculator } from './calculator.js';
 
 const SAVE_KEY = 'safari-scholar-save-v3';
 
@@ -174,6 +175,10 @@ const leaderboard = createLeaderboard({
 });
 document.getElementById('leaderboardBtn').addEventListener('click', () => leaderboard.open());
 document.getElementById('leaderboardBackdrop').addEventListener('click', () => leaderboard.close());
+
+// No auth/gating — available to everyone, mounted once and toggled from
+// wherever a numeric question is on screen (see eduUI.js's question view).
+const calculator = createCalculator({ root: document.getElementById('calculator') });
 
 function currentGameStateBlob() {
   return {
@@ -696,9 +701,11 @@ const eduUI = createEduUI({
   isDevMode: () => devMode,
   awardCredits,
   awardResearch,
+  calculator,
   onClose: () => {
     expeditionEl.classList.add('hidden');
     expeditionScenery.stop();
+    calculator.close();
     persist();
   },
 });

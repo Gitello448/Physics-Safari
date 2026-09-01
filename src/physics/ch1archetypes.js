@@ -178,9 +178,13 @@ const sciMultiplyDivide = {
         unknown: `a ${op} b`,
         principle: 'Scientific notation: combine coefficients directly; add exponents for ×, subtract for ÷.',
         substitution: `(${a.coeff} × 10^${a.exp}) ${op} (${b.coeff} × 10^${b.exp})`,
+        // The prompt asks for a plain decimal, but the walkthrough shouldn't
+        // stop at the combined exponential form — show the multiply-out step
+        // explicitly (coefficient × 10^n → the actual decimal) so it's clear
+        // HOW that last step happens, not just that it does.
         algebra: op === '×'
-          ? `= (${a.coeff} ${op} ${b.coeff}) × 10^(${a.exp}+${b.exp})`
-          : `= (${a.coeff} ${op} ${b.coeff}) × 10^(${a.exp}-${b.exp})`,
+          ? `= (${a.coeff} ${op} ${b.coeff}) × 10^(${a.exp}+${b.exp}) = ${round2(a.coeff * b.coeff)} × 10^${a.exp + b.exp} = ${rounded} (multiplied out)`
+          : `= (${a.coeff} ${op} ${b.coeff}) × 10^(${a.exp}-${b.exp}) = ${round2(a.coeff / b.coeff)} × 10^${a.exp - b.exp} = ${rounded} (multiplied out)`,
         result: `${rounded}`,
         interpretation: 'Keeping coefficients and exponents separate avoids errors from typing huge/tiny numbers directly.',
       },

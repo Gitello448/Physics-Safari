@@ -403,7 +403,10 @@ export function createEduUI({ root, mastery, isDevMode, awardCredits, awardResea
     }).join('');
 
     render(`
-      <div class="exp-nav"><span class="exp-subheader" style="margin:0;">${progressLabel} &nbsp;·&nbsp; ${diffStars}</span></div>
+      <div class="exp-nav">
+        <button class="small-btn" id="expExitBtn">← Exit to Park</button>
+        <span class="exp-subheader" style="margin:0;">${progressLabel} &nbsp;·&nbsp; ${diffStars}</span>
+      </div>
       <div class="question-card">
         <div class="question-prompt">${escapeHtml(problem.prompt)}</div>
         ${problem.diagram ? '<canvas id="diagramCanvas" class="diagram-canvas"></canvas>' : ''}
@@ -432,6 +435,20 @@ export function createEduUI({ root, mastery, isDevMode, awardCredits, awardResea
     // calculator stays usable after submitting too — e.g. to double-check
     // the given solution's arithmetic against what you got.
     root.querySelector('#calcToggleBtn')?.addEventListener('click', () => calculator.toggle());
+
+    // Previously the only way out of an in-progress question was closing the
+    // tab — no back button at all. Every attempt already answered so far in
+    // this session already updated `mastery` in memory (submitAnswer()
+    // records it immediately, not just at the summary screen), so bailing
+    // out here doesn't lose that; it just skips whatever's left in the
+    // queue. onClose() (wired in main.js) calls persist(), so leaving here
+    // actually saves that mastery progress instead of leaving it sitting
+    // unsaved until some later action happens to trigger a save.
+    root.querySelector('#expExitBtn').addEventListener('click', () => {
+      session = null;
+      current = null;
+      onClose();
+    });
 
     if (!answered) {
       if (problem.type === 'numerical' || problem.type === 'vector') {

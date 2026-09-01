@@ -157,7 +157,16 @@ document.getElementById('authSignOutBtn').addEventListener('click', async () => 
 // written in guest mode, so it can never be silently mixed between accounts.
 let cloudUserId = null;
 let cloudSaveTimer = null;
+let cloudSaveMaxWaitTimer = null;
 const CLOUD_SAVE_DEBOUNCE_MS = 2000;
+// scheduleCloudSave() below is a pure debounce — every call pushes the write
+// CLOUD_SAVE_DEBOUNCE_MS further out. That's fine for a single edit, but a
+// continuous burst of edits (each one landing within 2s of the last, e.g.
+// rapid-fire building) would keep deferring the actual write with no upper
+// bound, so an app crash or force-quit mid-streak could lose the whole
+// streak, not just "the last couple seconds". This ceiling guarantees a real
+// write lands at least this often even under nonstop play.
+const CLOUD_SAVE_MAX_WAIT_MS = 8000;
 
 const characterLab = createCharacterLab({
   root: document.getElementById('characterLab'),
@@ -252,7 +261,23 @@ let switchingAccount = false;
 function scheduleCloudSave() {
   if (switchingAccount) return;
   clearTimeout(cloudSaveTimer);
-  cloudSaveTimer = setTimeout(() => flushCloudSave(cloudUserId), CLOUD_SAVE_DEBOUNCE_MS);
+  cloudSaveTimer = setTimeout(flushScheduledCloudSave, CLOUD_SAVE_DEBOUNCE_MS);
+  // Only armed by the FIRST edit of a burst — later edits in the same burst
+  // reschedule cloudSaveTimer above but leave this one alone, so it keeps
+  // counting down toward the ceiling regardless of how often they keep typing/clicking.
+  if (!cloudSaveMaxWaitTimer) {
+    cloudSaveMaxWaitTimer = setTimeout(flushScheduledCloudSave, CLOUD_SAVE_MAX_WAIT_MS);
+  }
+}
+
+function clearScheduledCloudSave() {
+  clearTimeout(cloudSaveTimer); cloudSaveTimer = null;
+  clearTimeout(cloudSaveMaxWaitTimer); cloudSaveMaxWaitTimer = null;
+}
+
+function flushScheduledCloudSave() {
+  clearScheduledCloudSave();
+  flushCloudSave(cloudUserId);
 }
 
 const cloudSyncBackdropEl = document.getElementById('cloudSyncBackdrop');
@@ -355,7 +380,7 @@ onAuthStateChange((session) => {
     try {
       const previousUserId = cloudUserId;
       if (previousUserId) {
-        clearTimeout(cloudSaveTimer);
+        clearScheduledCloudSave();
         await flushCloudSave(previousUserId);
       }
       cloudUserId = newUserId;
@@ -852,13 +877,10 @@ loadLocalIntoGame();
 // Make sure the last few seconds of play aren't lost if the tab is closed
 // or backgrounded right after an edit, since cloud saves are debounced.
 window.addEventListener('beforeunload', () => {
-  if (cloudUserId) { clearTimeout(cloudSaveTimer); flushCloudSave(cloudUserId); }
+  if (cloudUserId) flushScheduledCloudSave();
 });
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden' && cloudUserId) {
-    clearTimeout(cloudSaveTimer);
-    flushCloudSave(cloudUserId);
-  }
+  if (document.visibilityState === 'hidden' && cloudUserId) flushScheduledCloudSave();
 });
 
 // --- Visitors: population target tracks how developed the park is ------
